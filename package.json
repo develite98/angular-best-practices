@@ -1,0 +1,33 @@
+{
+  "name": "angular-best-practices",
+  "version": "1.0.0",
+  "description": "Angular best practices for AI agents and LLMs",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "pnpm run build-agents && pnpm run extract-tests",
+    "build-agents": "tsx build/src/build.ts",
+    "validate": "tsx build/src/validate.ts",
+    "extract-tests": "tsx build/src/extract-tests.ts",
+    "dev": "pnpm run build && pnpm run validate"
+  },
+  "keywords": [
+    "angular",
+    "performance",
+    "guidelines",
+    "llm",
+    "agents",
+    "skills"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/develite98/angular-best-practices.git"
+  },
+  "homepage": "https://github.com/develite98/angular-best-practices#readme",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,703 @@
+[
+  {
+    "ruleId": "change-detach-reattach",
+    "ruleTitle": "Detach Change Detector for Heavy Operations",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-animation',\n  template: `<canvas #canvas></canvas>`\n})\nexport class AnimationComponent implements OnInit {\n  @ViewChild('canvas') canvas!: ElementRef<HTMLCanvasElement>;\n\n  ngOnInit() {\n    this.animate();\n  }\n\n  animate() {\n    this.drawFrame();\n    requestAnimationFrame(() => this.animate());\n    // Each frame causes unnecessary change detection\n  }\n}",
+    "language": "typescript",
+    "description": "Change detection runs during animation"
+  },
+  {
+    "ruleId": "change-detach-reattach",
+    "ruleTitle": "Detach Change Detector for Heavy Operations",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-animation',\n  template: `\n    <canvas #canvas></canvas>\n    <p>FPS: {{ fps }}</p>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class AnimationComponent implements OnInit {\n  @ViewChild('canvas') canvas!: ElementRef<HTMLCanvasElement>;\n  fps = 0;\n\n  constructor(private cdr: ChangeDetectorRef) {}\n\n  ngOnInit() {\n    this.cdr.detach();  // Exclude from change detection\n    this.animate();\n    this.updateFps();\n  }\n\n  animate() {\n    this.drawFrame();\n    requestAnimationFrame(() => this.animate());\n  }\n\n  updateFps() {\n    setInterval(() => {\n      this.cdr.detectChanges();  // Manual update only when needed\n    }, 1000);\n  }\n}",
+    "language": "typescript",
+    "description": "Detach during animation"
+  },
+  {
+    "ruleId": "change-onpush",
+    "ruleTitle": "Use OnPush Change Detection Strategy",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-user-list',\n  template: `\n    @for (user of users; track user.id) {\n      <!-- formatDate called on EVERY change detection cycle -->\n      <span>{{ formatDate(user.created) }}</span>\n    }\n  `\n})\nexport class UserListComponent {\n  @Input() users: User[] = [];\n\n  formatDate(date: Date): string {\n    return new Intl.DateTimeFormat('en-US').format(date);\n  }\n}",
+    "language": "typescript",
+    "description": "Default checks on every cycle"
+  },
+  {
+    "ruleId": "change-onpush",
+    "ruleTitle": "Use OnPush Change Detection Strategy",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-user-list',\n  template: `\n    @for (user of users; track user.id) {\n      <span>{{ user.created | date }}</span>\n    }\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserListComponent {\n  @Input() users: User[] = [];\n  // Component only checks when users reference changes\n  // Use pure pipes instead of methods in templates\n}",
+    "language": "typescript",
+    "description": "OnPush limits checks"
+  },
+  {
+    "ruleId": "change-run-outside-zone",
+    "ruleTitle": "Run Non-UI Code Outside NgZone",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-scroll-tracker',\n  template: `<div>Scroll position logged to console</div>`\n})\nexport class ScrollTrackerComponent implements OnInit {\n  ngOnInit() {\n    // Every scroll event triggers change detection\n    window.addEventListener('scroll', this.onScroll);\n  }\n\n  onScroll = () => {\n    console.log('Scroll:', window.scrollY);  // No UI update needed\n  };\n}",
+    "language": "typescript",
+    "description": "Event listener triggers change detection"
+  },
+  {
+    "ruleId": "change-run-outside-zone",
+    "ruleTitle": "Run Non-UI Code Outside NgZone",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-scroll-tracker',\n  template: `<div>Scroll position: {{ scrollPosition }}</div>`,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class ScrollTrackerComponent implements OnInit {\n  scrollPosition = 0;\n\n  constructor(\n    private ngZone: NgZone,\n    private cdr: ChangeDetectorRef\n  ) {}\n\n  ngOnInit() {\n    this.ngZone.runOutsideAngular(() => {\n      window.addEventListener('scroll', this.onScroll);\n    });\n  }\n\n  onScroll = () => {\n    const newPosition = window.scrollY;\n    if (Math.abs(newPosition - this.scrollPosition) > 100) {\n      this.ngZone.run(() => {\n        this.scrollPosition = newPosition;\n        this.cdr.markForCheck();\n      });\n    }\n  };\n}",
+    "language": "typescript",
+    "description": "Run outside zone, enter for UI updates"
+  },
+  {
+    "ruleId": "perf-web-workers",
+    "ruleTitle": "Offload Heavy Computation to Web Workers",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <button (click)=\"processData()\">Process</button>\n    <div>Result: {{ result }}</div>\n    <!-- UI freezes while processing -->\n  `\n})\nexport class DataProcessorComponent {\n  result = '';\n\n  processData() {\n    // Blocks main thread for seconds\n    const data = this.generateLargeDataset();\n    this.result = this.heavyComputation(data);\n  }\n}",
+    "language": "typescript",
+    "description": "Heavy computation blocks UI"
+  },
+  {
+    "ruleId": "perf-web-workers",
+    "ruleTitle": "Offload Heavy Computation to Web Workers",
+    "type": "good",
+    "code": "// ng generate web-worker data-processor\n\n// data-processor.worker.ts\naddEventListener('message', ({ data }) => {\n  const result = heavyComputation(data);\n  postMessage(result);\n});\n\n// data-processor.component.ts\n@Component({\n  template: `\n    <button (click)=\"processData()\" [disabled]=\"isProcessing()\">\n      {{ isProcessing() ? 'Processing...' : 'Process' }}\n    </button>\n    <div>Result: {{ result() }}</div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class DataProcessorComponent {\n  result = signal('');\n  isProcessing = signal(false);\n  private worker = new Worker(\n    new URL('./data-processor.worker', import.meta.url)\n  );\n\n  constructor() {\n    this.worker.onmessage = ({ data }) => {\n      this.result.set(data);\n      this.isProcessing.set(false);\n    };\n  }\n\n  processData() {\n    this.isProcessing.set(true);\n    this.worker.postMessage(this.generateLargeDataset());\n  }\n}",
+    "language": "typescript",
+    "description": "Web Worker keeps UI responsive"
+  },
+  {
+    "ruleId": "rxjs-operators",
+    "ruleTitle": "Use Efficient RxJS Operators",
+    "type": "bad",
+    "code": "@Component({...})\nexport class SearchComponent {\n  searchControl = new FormControl('');\n\n  results$ = this.searchControl.valueChanges.pipe(\n    // mergeMap doesn't cancel previous requests\n    // Results can arrive out of order\n    mergeMap(query => this.searchService.search(query))\n  );\n}",
+    "language": "typescript",
+    "description": "mergeMap causes race conditions"
+  },
+  {
+    "ruleId": "rxjs-operators",
+    "ruleTitle": "Use Efficient RxJS Operators",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    <input [formControl]=\"searchControl\" />\n    @for (result of results$ | async; track result.id) {\n      <div>{{ result.title }}</div>\n    }\n  `\n})\nexport class SearchComponent {\n  searchControl = new FormControl('');\n\n  results$ = this.searchControl.valueChanges.pipe(\n    debounceTime(300),                // Wait for typing to stop\n    distinctUntilChanged(),            // Skip if same value\n    filter(query => query.length > 2), // Min length\n    switchMap(query =>                 // Cancel previous request\n      this.searchService.search(query).pipe(\n        catchError(() => of([]))\n      )\n    )\n  );\n}",
+    "language": "typescript",
+    "description": "switchMap cancels previous, debounce reduces calls"
+  },
+  {
+    "ruleId": "rxjs-share-replay",
+    "ruleTitle": "Share Observables to Avoid Duplicate Requests",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <!-- 3 async pipes = 3 HTTP requests! -->\n    <h1>{{ (user$ | async)?.name }}</h1>\n    <p>{{ (user$ | async)?.email }}</p>\n    <img [src]=\"(user$ | async)?.avatar\" />\n  `\n})\nexport class UserProfileComponent {\n  user$ = this.http.get<User>('/api/user');\n}",
+    "language": "typescript",
+    "description": "Each async pipe triggers separate request"
+  },
+  {
+    "ruleId": "rxjs-share-replay",
+    "ruleTitle": "Share Observables to Avoid Duplicate Requests",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    @if (user$ | async; as user) {\n      <h1>{{ user.name }}</h1>\n      <p>{{ user.email }}</p>\n      <img [src]=\"user.avatar\" />\n    }\n  `\n})\nexport class UserProfileComponent {\n  user$ = this.http.get<User>('/api/user').pipe(\n    shareReplay({ bufferSize: 1, refCount: true })\n  );\n}",
+    "language": "typescript",
+    "description": "Share observable among subscribers"
+  },
+  {
+    "ruleId": "bundle-defer",
+    "ruleTitle": "Use @defer for Lazy Loading Components",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-dashboard',\n  imports: [HeavyChartComponent, DataTableComponent],\n  template: `\n    <h1>Dashboard</h1>\n\n    <!-- Chart library loaded even if user never scrolls down -->\n    <app-heavy-chart [data]=\"chartData\" />\n\n    <!-- Large table always in initial bundle -->\n    <app-data-table [rows]=\"tableData\" />\n  `\n})\nexport class DashboardComponent {}",
+    "language": "typescript",
+    "description": "Heavy components loaded immediately"
+  },
+  {
+    "ruleId": "bundle-defer",
+    "ruleTitle": "Use @defer for Lazy Loading Components",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-dashboard',\n  imports: [HeavyChartComponent, DataTableComponent],\n  template: `\n    <h1>Dashboard</h1>\n\n    @defer (on viewport) {\n      <app-heavy-chart [data]=\"chartData\" />\n    } @placeholder {\n      <div class=\"chart-skeleton\">Loading chart...</div>\n    }\n\n    @defer (on interaction) {\n      <app-data-table [rows]=\"tableData\" />\n    } @placeholder {\n      <button>Click to load data table</button>\n    }\n  `\n})\nexport class DashboardComponent {}",
+    "language": "typescript",
+    "description": "Defer loading until needed"
+  },
+  {
+    "ruleId": "bundle-lazy-routes",
+    "ruleTitle": "Lazy Load Routes with loadComponent",
+    "type": "bad",
+    "code": "import { DashboardComponent } from './dashboard/dashboard.component';\nimport { SettingsComponent } from './settings/settings.component';\nimport { ReportsComponent } from './reports/reports.component';\n\nexport const routes: Routes = [\n  { path: '', component: DashboardComponent },\n  { path: 'settings', component: SettingsComponent },\n  { path: 'reports', component: ReportsComponent }\n  // All components loaded upfront, even if never visited\n];",
+    "language": "typescript",
+    "description": "Eagerly loaded routes"
+  },
+  {
+    "ruleId": "bundle-lazy-routes",
+    "ruleTitle": "Lazy Load Routes with loadComponent",
+    "type": "good",
+    "code": "export const routes: Routes = [\n  {\n    path: '',\n    loadComponent: () =>\n      import('./dashboard/dashboard.component').then(m => m.DashboardComponent)\n  },\n  {\n    path: 'settings',\n    loadComponent: () =>\n      import('./settings/settings.component').then(m => m.SettingsComponent)\n  },\n  {\n    path: 'reports',\n    loadChildren: () =>\n      import('./reports/reports.routes').then(m => m.REPORTS_ROUTES)\n  }\n];",
+    "language": "typescript",
+    "description": "Lazy loaded routes"
+  },
+  {
+    "ruleId": "bundle-preload",
+    "ruleTitle": "Use Preload Strategies for Lazy Modules",
+    "type": "bad",
+    "code": "export const appConfig: ApplicationConfig = {\n  providers: [\n    provideRouter(routes)\n    // No preloading - modules load on demand\n    // User experiences delay on first navigation\n  ]\n};",
+    "language": "typescript",
+    "description": "No preloading causes navigation delay"
+  },
+  {
+    "ruleId": "bundle-preload",
+    "ruleTitle": "Use Preload Strategies for Lazy Modules",
+    "type": "good",
+    "code": "import { provideRouter, withPreloading, PreloadAllModules } from '@angular/router';\n\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    provideRouter(\n      routes,\n      withPreloading(PreloadAllModules)\n    )\n  ]\n};",
+    "language": "typescript",
+    "description": "Preload all modules after initial load"
+  },
+  {
+    "ruleId": "bundle-standalone",
+    "ruleTitle": "Use Standalone Components",
+    "type": "bad",
+    "code": "@NgModule({\n  declarations: [UserListComponent, UserDetailComponent],\n  imports: [CommonModule, SharedModule],\n  exports: [UserListComponent]\n})\nexport class UserModule {}\n\n@Component({\n  selector: 'app-user-list',\n  template: `...`\n})\nexport class UserListComponent {}\n// Dependencies come from module - not explicit",
+    "language": "typescript",
+    "description": "NgModule-based with implicit dependencies"
+  },
+  {
+    "ruleId": "bundle-standalone",
+    "ruleTitle": "Use Standalone Components",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-user-list',\n  // No standalone: true needed in v19+\n  imports: [RouterLink, UserAvatarComponent],\n  changeDetection: ChangeDetectionStrategy.OnPush,\n  template: `\n    @for (user of users(); track user.id) {\n      <app-user-avatar [user]=\"user\" />\n      <a [routerLink]=\"['/users', user.id]\">{{ user.name }}</a>\n    }\n  `\n})\nexport class UserListComponent {\n  private userService = inject(UserService);\n  users = toSignal(this.userService.getUsers(), { initialValue: [] });\n}",
+    "language": "typescript",
+    "description": "Standalone with explicit imports"
+  },
+  {
+    "ruleId": "change-signals",
+    "ruleTitle": "Use Angular Signals for Reactive State",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-counter',\n  template: `\n    <p>Count: {{ count }}</p>\n    <p>Double: {{ count * 2 }}</p>\n    <button (click)=\"increment()\">+</button>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class CounterComponent {\n  count = 0;\n\n  constructor(private cdr: ChangeDetectorRef) {}\n\n  increment() {\n    this.count++;\n    this.cdr.markForCheck(); // Manual trigger required\n  }\n}",
+    "language": "typescript",
+    "description": "Manual change detection with OnPush"
+  },
+  {
+    "ruleId": "change-signals",
+    "ruleTitle": "Use Angular Signals for Reactive State",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-counter',\n  template: `\n    <p>Count: {{ count() }}</p>\n    <p>Double: {{ doubleCount() }}</p>\n    <button (click)=\"increment()\">+</button>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class CounterComponent {\n  count = signal(0);\n  doubleCount = computed(() => this.count() * 2);\n\n  increment() {\n    this.count.update(c => c + 1);\n    // No markForCheck needed - signals handle it automatically\n  }\n}",
+    "language": "typescript",
+    "description": "Signals with automatic change detection"
+  },
+  {
+    "ruleId": "component-signal-io",
+    "ruleTitle": "Use Signal Inputs and Outputs",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-user-card',\n  template: `\n    <h2>{{ name }}</h2>\n    <p>{{ email }}</p>\n    <button (click)=\"onSelect()\">Select</button>\n  `\n})\nexport class UserCardComponent implements OnChanges {\n  @Input() name!: string;\n  @Input() email = '';\n  @Output() selected = new EventEmitter<string>();\n\n  ngOnChanges(changes: SimpleChanges) {\n    if (changes['name']) {\n      console.log('Name changed:', this.name);\n    }\n  }\n\n  onSelect() {\n    this.selected.emit(this.name);\n  }\n}",
+    "language": "typescript",
+    "description": "Decorator-based with OnChanges"
+  },
+  {
+    "ruleId": "component-signal-io",
+    "ruleTitle": "Use Signal Inputs and Outputs",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-user-card',\n  template: `\n    <h2>{{ name() }}</h2>\n    <p>{{ email() }}</p>\n    <button (click)=\"handleClick()\">Select</button>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserCardComponent {\n  name = input.required<string>();\n  email = input('');\n  selected = output<string>();\n\n  constructor() {\n    effect(() => {\n      console.log('Name changed:', this.name());\n    });\n  }\n\n  handleClick() {\n    this.selected.emit(this.name());\n  }\n}",
+    "language": "typescript",
+    "description": "Signal inputs with effect"
+  },
+  {
+    "ruleId": "di-factory-providers",
+    "ruleTitle": "Use Factory Providers for Complex Setup",
+    "type": "bad",
+    "code": "@Injectable({ providedIn: 'root' })\nexport class StorageService {\n  private storage: Storage;\n\n  constructor() {\n    // Complex logic in constructor - hard to test\n    if (typeof window !== 'undefined' && window.localStorage) {\n      this.storage = window.localStorage;\n    } else {\n      this.storage = new MemoryStorage();\n    }\n  }\n}",
+    "language": "typescript",
+    "description": "Complex logic in constructor"
+  },
+  {
+    "ruleId": "di-factory-providers",
+    "ruleTitle": "Use Factory Providers for Complex Setup",
+    "type": "good",
+    "code": "export abstract class StorageService {\n  abstract getItem(key: string): string | null;\n  abstract setItem(key: string, value: string): void;\n}\n\nexport class LocalStorageService extends StorageService {\n  getItem(key: string) { return localStorage.getItem(key); }\n  setItem(key: string, value: string) { localStorage.setItem(key, value); }\n}\n\nexport class MemoryStorageService extends StorageService {\n  private store = new Map<string, string>();\n  getItem(key: string) { return this.store.get(key) ?? null; }\n  setItem(key: string, value: string) { this.store.set(key, value); }\n}\n\n// app.config.ts\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    {\n      provide: StorageService,\n      useFactory: () => {\n        const platformId = inject(PLATFORM_ID);\n        return isPlatformBrowser(platformId)\n          ? new LocalStorageService()\n          : new MemoryStorageService();\n      }\n    }\n  ]\n};",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "di-injection-token",
+    "ruleTitle": "Use InjectionToken for Type-Safe Configuration",
+    "type": "bad",
+    "code": "providers: [\n  { provide: 'API_URL', useValue: 'https://api.example.com' }\n]\n\n@Injectable({ providedIn: 'root' })\nexport class ApiService {\n  private apiUrl = inject('API_URL' as any);  // No type safety\n}",
+    "language": "typescript",
+    "description": "String tokens lose type safety"
+  },
+  {
+    "ruleId": "di-injection-token",
+    "ruleTitle": "Use InjectionToken for Type-Safe Configuration",
+    "type": "good",
+    "code": "// tokens.ts\nexport interface AppConfig {\n  apiUrl: string;\n  timeout: number;\n}\n\nexport const APP_CONFIG = new InjectionToken<AppConfig>('app.config');\n\n// app.config.ts\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    {\n      provide: APP_CONFIG,\n      useValue: { apiUrl: 'https://api.example.com', timeout: 5000 }\n    }\n  ]\n};\n\n// api.service.ts\n@Injectable({ providedIn: 'root' })\nexport class ApiService {\n  private config = inject(APP_CONFIG);  // Fully typed as AppConfig\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "di-provided-in-root",
+    "ruleTitle": "Use providedIn root for Tree-Shaking",
+    "type": "bad",
+    "code": "@Injectable()\nexport class UserService {}\n\n@NgModule({\n  providers: [UserService]  // Always in bundle, even if unused\n})\nexport class UserModule {}",
+    "language": "typescript",
+    "description": "Service always in bundle"
+  },
+  {
+    "ruleId": "di-provided-in-root",
+    "ruleTitle": "Use providedIn root for Tree-Shaking",
+    "type": "good",
+    "code": "@Injectable({ providedIn: 'root' })\nexport class UserService {\n  private http = inject(HttpClient);\n\n  getUsers(): Observable<User[]> {\n    return this.http.get<User[]>('/api/users');\n  }\n}\n\n// No providers array needed - just inject where used\n@Component({...})\nexport class UserListComponent {\n  private userService = inject(UserService);\n  users = toSignal(this.userService.getUsers(), { initialValue: [] });\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "directive-host-composition",
+    "ruleTitle": "Use Host Directives for Behavior Composition",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-button',\n  template: `<ng-content />`\n})\nexport class ButtonComponent {\n  @HostBinding('class.focused') isFocused = false;\n  @HostBinding('class.disabled') isDisabled = false;\n\n  @HostListener('focus') onFocus() { this.isFocused = true; }\n  @HostListener('blur') onBlur() { this.isFocused = false; }\n}\n\n@Component({\n  selector: 'app-card',\n  template: `<ng-content />`\n})\nexport class CardComponent {\n  // Same focus/disable logic duplicated...\n  @HostBinding('class.focused') isFocused = false;\n  @HostBinding('class.disabled') isDisabled = false;\n}",
+    "language": "typescript",
+    "description": "Repeated behavior across components"
+  },
+  {
+    "ruleId": "directive-host-composition",
+    "ruleTitle": "Use Host Directives for Behavior Composition",
+    "type": "good",
+    "code": "@Directive({\n  selector: '[focusable]',\n  host: {\n    'tabindex': '0',\n    '(focus)': 'onFocus()',\n    '(blur)': 'onBlur()',\n    '[class.focused]': 'isFocused()'\n  }\n})\nexport class FocusableDirective {\n  isFocused = signal(false);\n  onFocus() { this.isFocused.set(true); }\n  onBlur() { this.isFocused.set(false); }\n}\n\n@Component({\n  selector: 'app-button',\n  hostDirectives: [FocusableDirective],\n  template: `<ng-content />`\n})\nexport class ButtonComponent {}\n\n@Component({\n  selector: 'app-card',\n  hostDirectives: [FocusableDirective],\n  template: `<ng-content />`\n})\nexport class CardComponent {}",
+    "language": "typescript",
+    "description": "Reusable behavior directive"
+  },
+  {
+    "ruleId": "forms-reactive",
+    "ruleTitle": "Use Reactive Forms for Complex Forms",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <form #userForm=\"ngForm\" (ngSubmit)=\"onSubmit()\">\n      <input [(ngModel)]=\"user.email\" name=\"email\" required email />\n      <input [(ngModel)]=\"user.password\" name=\"password\" required />\n      <input [(ngModel)]=\"user.confirmPassword\" name=\"confirmPassword\" />\n\n      <!-- Complex validation in template -->\n      @if (userForm.controls['password']?.value !== userForm.controls['confirmPassword']?.value) {\n        <div>Passwords don't match</div>\n      }\n    </form>\n  `\n})\nexport class RegisterComponent {\n  user = { email: '', password: '', confirmPassword: '' };\n}",
+    "language": "typescript",
+    "description": "Template-driven with complex validation"
+  },
+  {
+    "ruleId": "forms-reactive",
+    "ruleTitle": "Use Reactive Forms for Complex Forms",
+    "type": "good",
+    "code": "@Component({\n  imports: [ReactiveFormsModule],\n  changeDetection: ChangeDetectionStrategy.OnPush,\n  template: `\n    <form [formGroup]=\"form\" (ngSubmit)=\"onSubmit()\">\n      <input formControlName=\"email\" />\n      <input type=\"password\" formControlName=\"password\" />\n      <input type=\"password\" formControlName=\"confirmPassword\" />\n\n      @if (form.errors?.['passwordMismatch']) {\n        <span class=\"error\">Passwords don't match</span>\n      }\n\n      <button [disabled]=\"form.invalid\">Submit</button>\n    </form>\n  `\n})\nexport class RegisterComponent {\n  private fb = inject(NonNullableFormBuilder);\n\n  form = this.fb.group({\n    email: ['', [Validators.required, Validators.email]],\n    password: ['', [Validators.required, Validators.minLength(8)]],\n    confirmPassword: ['', Validators.required]\n  }, {\n    validators: [this.passwordMatchValidator]\n  });\n\n  passwordMatchValidator(group: FormGroup): ValidationErrors | null {\n    const password = group.get('password')?.value;\n    const confirm = group.get('confirmPassword')?.value;\n    return password === confirm ? null : { passwordMismatch: true };\n  }\n\n  onSubmit() {\n    if (this.form.valid) {\n      const { email, password } = this.form.getRawValue();\n    }\n  }\n}",
+    "language": "typescript",
+    "description": "Reactive form with typed controls"
+  },
+  {
+    "ruleId": "http-interceptors",
+    "ruleTitle": "Use Functional HTTP Interceptors",
+    "type": "bad",
+    "code": "@Injectable()\nexport class AuthInterceptor implements HttpInterceptor {\n  constructor(private authService: AuthService) {}\n\n  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {\n    const token = this.authService.getToken();\n    if (token) {\n      req = req.clone({\n        setHeaders: { Authorization: `Bearer ${token}` }\n      });\n    }\n    return next.handle(req);\n  }\n}\n\n// Registration requires verbose provider config\nproviders: [\n  { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }\n]",
+    "language": "typescript",
+    "description": "Class-based interceptor"
+  },
+  {
+    "ruleId": "http-interceptors",
+    "ruleTitle": "Use Functional HTTP Interceptors",
+    "type": "good",
+    "code": "export const authInterceptor: HttpInterceptorFn = (req, next) => {\n  const authService = inject(AuthService);\n  const token = authService.getToken();\n\n  if (token) {\n    req = req.clone({\n      setHeaders: { Authorization: `Bearer ${token}` }\n    });\n  }\n\n  return next(req);\n};\n\n// app.config.ts - Clean registration\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    provideHttpClient(\n      withInterceptors([authInterceptor])\n    )\n  ]\n};",
+    "language": "typescript",
+    "description": "Functional interceptor"
+  },
+  {
+    "ruleId": "http-resource",
+    "ruleTitle": "Use httpResource for Signal-Based HTTP",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    @if (loading) {\n      <p>Loading...</p>\n    } @else if (error) {\n      <p>Error: {{ error }}</p>\n    } @else {\n      <p>{{ user?.name }}</p>\n    }\n  `\n})\nexport class UserComponent implements OnInit {\n  user: User | null = null;\n  loading = false;\n  error: string | null = null;\n\n  constructor(private http: HttpClient) {}\n\n  ngOnInit() {\n    this.loading = true;\n    this.http.get<User>('/api/users/1').subscribe({\n      next: (user) => {\n        this.user = user;\n        this.loading = false;\n      },\n      error: (err) => {\n        this.error = err.message;\n        this.loading = false;\n      }\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Manual loading state management"
+  },
+  {
+    "ruleId": "http-resource",
+    "ruleTitle": "Use httpResource for Signal-Based HTTP",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    @if (userResource.isLoading()) {\n      <p>Loading...</p>\n    } @else if (userResource.error()) {\n      <p>Error: {{ userResource.error()?.message }}</p>\n      <button (click)=\"userResource.reload()\">Retry</button>\n    } @else if (userResource.hasValue()) {\n      <h1>{{ userResource.value().name }}</h1>\n    }\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserComponent {\n  userId = signal('123');\n\n  // Auto-refetches when userId changes\n  userResource = httpResource<User>(() => `/api/users/${this.userId()}`);\n}",
+    "language": "typescript",
+    "description": "httpResource with automatic state"
+  },
+  {
+    "ruleId": "http-transfer-state",
+    "ruleTitle": "Use TransferState for SSR Hydration",
+    "type": "bad",
+    "code": "@Component({...})\nexport class ProductListComponent implements OnInit {\n  products$!: Observable<Product[]>;\n\n  constructor(private http: HttpClient) {}\n\n  ngOnInit() {\n    // Runs on server AND client = 2 identical requests\n    this.products$ = this.http.get<Product[]>('/api/products');\n  }\n}",
+    "language": "typescript",
+    "description": "Duplicate requests during hydration"
+  },
+  {
+    "ruleId": "http-transfer-state",
+    "ruleTitle": "Use TransferState for SSR Hydration",
+    "type": "good",
+    "code": "// app.config.ts\nimport { provideClientHydration, withHttpTransferCacheOptions } from '@angular/platform-browser';\n\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    provideHttpClient(withFetch()),\n    provideClientHydration(\n      withHttpTransferCacheOptions({\n        includePostRequests: true\n      })\n    )\n  ]\n};\n\n// component.ts - No changes needed\n@Component({...})\nexport class ProductListComponent {\n  products$ = inject(HttpClient).get<Product[]>('/api/products');\n  // Response transferred from server to client automatically\n}",
+    "language": "typescript",
+    "description": "Enable HTTP cache transfer"
+  },
+  {
+    "ruleId": "routing-signal-inputs",
+    "ruleTitle": "Use Signal Inputs for Route Parameters",
+    "type": "bad",
+    "code": "@Component({\n  template: `<h1>User {{ userId }}</h1>`\n})\nexport class UserDetailComponent implements OnInit, OnDestroy {\n  userId: string | null = null;\n  private subscription?: Subscription;\n\n  constructor(private route: ActivatedRoute) {}\n\n  ngOnInit() {\n    this.subscription = this.route.paramMap.subscribe((params) => {\n      this.userId = params.get('id');\n    });\n  }\n\n  ngOnDestroy() {\n    this.subscription?.unsubscribe();\n  }\n}",
+    "language": "typescript",
+    "description": "Manual route parameter subscription"
+  },
+  {
+    "ruleId": "routing-signal-inputs",
+    "ruleTitle": "Use Signal Inputs for Route Parameters",
+    "type": "good",
+    "code": "// app.config.ts - Enable input binding\nexport const appConfig: ApplicationConfig = {\n  providers: [\n    provideRouter(routes, withComponentInputBinding())\n  ]\n};\n\n// Route: { path: 'users/:id', component: UserDetailComponent }\n@Component({\n  template: `<h1>User {{ id() }}</h1>`,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserDetailComponent {\n  id = input.required<string>();  // Route param auto-bound\n  userId = computed(() => parseInt(this.id(), 10));\n}",
+    "language": "typescript",
+    "description": "Signal input for route params"
+  },
+  {
+    "ruleId": "rxjs-async-pipe",
+    "ruleTitle": "Use Async Pipe Instead of Manual Subscribe",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    @if (user) {\n      <h1>{{ user.name }}</h1>\n    }\n  `\n})\nexport class UserProfileComponent implements OnInit, OnDestroy {\n  user: User | null = null;\n  private subscription!: Subscription;\n\n  constructor(private userService: UserService) {}\n\n  ngOnInit() {\n    this.subscription = this.userService.getCurrentUser()\n      .subscribe(user => this.user = user);\n  }\n\n  ngOnDestroy() {\n    this.subscription.unsubscribe();  // Easy to forget\n  }\n}",
+    "language": "typescript",
+    "description": "Manual subscription with leak potential"
+  },
+  {
+    "ruleId": "rxjs-async-pipe",
+    "ruleTitle": "Use Async Pipe Instead of Manual Subscribe",
+    "type": "good",
+    "code": "@Component({\n  imports: [AsyncPipe],\n  changeDetection: ChangeDetectionStrategy.OnPush,\n  template: `\n    @if (user$ | async; as user) {\n      <h1>{{ user.name }}</h1>\n    }\n  `\n})\nexport class UserProfileComponent {\n  user$ = inject(UserService).getCurrentUser();\n  // No manual subscribe/unsubscribe needed\n}",
+    "language": "typescript",
+    "description": "Async pipe handles lifecycle"
+  },
+  {
+    "ruleId": "rxjs-takeuntil",
+    "ruleTitle": "Use takeUntilDestroyed for Cleanup",
+    "type": "bad",
+    "code": "@Component({...})\nexport class DataComponent implements OnInit, OnDestroy {\n  private destroy$ = new Subject<void>();\n\n  ngOnInit() {\n    this.dataService.getData()\n      .pipe(takeUntil(this.destroy$))\n      .subscribe(data => this.processData(data));\n  }\n\n  ngOnDestroy() {\n    this.destroy$.next();\n    this.destroy$.complete();\n    // Boilerplate, easy to forget\n  }\n}",
+    "language": "typescript",
+    "description": "Manual Subject-based cleanup"
+  },
+  {
+    "ruleId": "rxjs-takeuntil",
+    "ruleTitle": "Use takeUntilDestroyed for Cleanup",
+    "type": "good",
+    "code": "@Component({...})\nexport class DataComponent {\n  constructor() {\n    // In constructor, DestroyRef is auto-injected\n    this.dataService.getData()\n      .pipe(takeUntilDestroyed())\n      .subscribe(data => this.processData(data));\n  }\n}\n\n// Or outside constructor:\nexport class DataComponent implements OnInit {\n  private destroyRef = inject(DestroyRef);\n\n  ngOnInit() {\n    this.dataService.getData()\n      .pipe(takeUntilDestroyed(this.destroyRef))\n      .subscribe(data => this.processData(data));\n  }\n}",
+    "language": "typescript",
+    "description": "takeUntilDestroyed handles cleanup"
+  },
+  {
+    "ruleId": "ssr-hydration",
+    "ruleTitle": "Use Incremental Hydration for SSR",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <app-header />\n    <app-hero />\n    <app-comments [postId]=\"postId\" />      <!-- Heavy, below fold -->\n    <app-recommendations />                  <!-- Heavy, below fold -->\n    <app-footer />\n  `\n})\nexport class PostComponent {\n  postId = input.required<string>();\n}",
+    "language": "typescript",
+    "description": "Full hydration of all components"
+  },
+  {
+    "ruleId": "ssr-hydration",
+    "ruleTitle": "Use Incremental Hydration for SSR",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    <app-header />\n    <app-hero />\n\n    @defer (hydrate on viewport) {\n      <app-comments [postId]=\"postId()\" />\n    } @placeholder {\n      <div class=\"comments-skeleton\">Loading comments...</div>\n    }\n\n    @defer (hydrate on idle) {\n      <app-recommendations />\n    }\n\n    @defer (hydrate never) {\n      <app-footer />\n    }\n  `\n})\nexport class PostComponent {\n  postId = input.required<string>();\n}",
+    "language": "typescript",
+    "description": "Incremental hydration with @defer"
+  },
+  {
+    "ruleId": "template-ng-optimized-image",
+    "ruleTitle": "Use NgOptimizedImage for Images",
+    "type": "bad",
+    "code": "<!-- No lazy loading, no priority hints, potential CLS -->\n<img src=\"/assets/hero.jpg\" alt=\"Hero image\">\n\n<!-- May cause layout shift without dimensions -->\n<img src=\"{{ user.avatar }}\" alt=\"User avatar\">",
+    "language": "html",
+    "description": "Native img without optimization"
+  },
+  {
+    "ruleId": "template-ng-optimized-image",
+    "ruleTitle": "Use NgOptimizedImage for Images",
+    "type": "good",
+    "code": "@Component({\n  imports: [NgOptimizedImage],\n  template: `\n    <!-- Priority image (above fold, LCP candidate) -->\n    <img\n      ngSrc=\"/assets/hero.jpg\"\n      alt=\"Hero image\"\n      width=\"1200\"\n      height=\"600\"\n      priority\n    />\n\n    <!-- Lazy loaded by default (below fold) -->\n    <img\n      [ngSrc]=\"user().avatar\"\n      alt=\"User avatar\"\n      width=\"64\"\n      height=\"64\"\n    />\n  `\n})\nexport class ProductComponent {\n  user = input.required<User>();\n}",
+    "language": "typescript",
+    "description": "NgOptimizedImage with best practices"
+  },
+  {
+    "ruleId": "template-pure-pipes",
+    "ruleTitle": "Use Pure Pipes for Data Transformation",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    @for (product of products; track product.id) {\n      <!-- formatPrice called on EVERY change detection cycle -->\n      <span>{{ formatPrice(product.price) }}</span>\n    }\n  `\n})\nexport class ProductListComponent {\n  formatPrice(price: number): string {\n    return new Intl.NumberFormat('en-US', {\n      style: 'currency',\n      currency: 'USD'\n    }).format(price);\n  }\n}",
+    "language": "typescript",
+    "description": "Method called on every change detection"
+  },
+  {
+    "ruleId": "template-pure-pipes",
+    "ruleTitle": "Use Pure Pipes for Data Transformation",
+    "type": "good",
+    "code": "@Pipe({ name: 'price' })\nexport class PricePipe implements PipeTransform {\n  transform(value: number, currency = 'USD'): string {\n    return new Intl.NumberFormat('en-US', {\n      style: 'currency',\n      currency\n    }).format(value);\n  }\n}\n\n@Component({\n  imports: [PricePipe],\n  changeDetection: ChangeDetectionStrategy.OnPush,\n  template: `\n    @for (product of products; track product.id) {\n      <span>{{ product.price | price }}</span>\n    }\n  `\n})\nexport class ProductListComponent {\n  products = signal<Product[]>([]);\n}",
+    "language": "typescript",
+    "description": "Pure pipe only runs when input changes"
+  },
+  {
+    "ruleId": "template-trackby",
+    "ruleTitle": "Use @for with track for Loops",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <!-- All items re-render when array changes -->\n    <div *ngFor=\"let user of users\">\n      <app-user-card [user]=\"user\" />\n    </div>\n  `\n})\nexport class UserListComponent {\n  users: User[] = [];\n}",
+    "language": "typescript",
+    "description": "No tracking causes full DOM recreation"
+  },
+  {
+    "ruleId": "template-trackby",
+    "ruleTitle": "Use @for with track for Loops",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    @for (user of users(); track user.id) {\n      <app-user-card [user]=\"user\" />\n    } @empty {\n      <p>No users found</p>\n    }\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserListComponent {\n  users = signal<User[]>([]);\n}",
+    "language": "typescript",
+    "description": "@for with required track"
+  },
+  {
+    "ruleId": "bundle-lazy-routes",
+    "ruleTitle": "Lazy Load Feature Modules",
+    "type": "bad",
+    "code": "import { UserModule } from './user/user.module';\nimport { AdminModule } from './admin/admin.module';\n\n@NgModule({\n  imports: [\n    RouterModule.forRoot(routes),\n    UserModule,   // Loaded immediately\n    AdminModule   // Loaded even if user never visits\n  ]\n})\nexport class AppRoutingModule {}",
+    "language": "typescript",
+    "description": "Eagerly loaded modules"
+  },
+  {
+    "ruleId": "bundle-lazy-routes",
+    "ruleTitle": "Lazy Load Feature Modules",
+    "type": "good",
+    "code": "const routes: Routes = [\n  {\n    path: 'users',\n    loadChildren: () =>\n      import('./user/user.module').then(m => m.UserModule)\n  },\n  {\n    path: 'admin',\n    loadChildren: () =>\n      import('./admin/admin.module').then(m => m.AdminModule),\n    canLoad: [AuthGuard]\n  }\n];\n\n@NgModule({\n  imports: [RouterModule.forRoot(routes)],\n  exports: [RouterModule]\n})\nexport class AppRoutingModule {}",
+    "language": "typescript",
+    "description": "Lazy loaded modules"
+  },
+  {
+    "ruleId": "bundle-ngmodule",
+    "ruleTitle": "Organize Code with Feature Modules",
+    "type": "bad",
+    "code": "@NgModule({\n  declarations: [\n    AppComponent,\n    HeaderComponent,\n    FooterComponent,\n    UserListComponent,\n    UserDetailComponent,\n    ProductListComponent,\n    ProductDetailComponent,\n    CartComponent,\n    CheckoutComponent,\n    // ... 50 more components\n  ],\n  imports: [\n    BrowserModule,\n    HttpClientModule,\n    FormsModule,\n    ReactiveFormsModule,\n  ],\n  bootstrap: [AppComponent]\n})\nexport class AppModule {}\n// Everything loaded upfront, huge initial bundle",
+    "language": "typescript",
+    "description": "Everything in AppModule"
+  },
+  {
+    "ruleId": "bundle-ngmodule",
+    "ruleTitle": "Organize Code with Feature Modules",
+    "type": "good",
+    "code": "// user.module.ts\n@NgModule({\n  declarations: [\n    UserListComponent,\n    UserDetailComponent,\n    UserAvatarComponent,\n  ],\n  imports: [\n    CommonModule,\n    UserRoutingModule,\n    SharedModule,\n  ]\n})\nexport class UserModule {}\n\n// product.module.ts\n@NgModule({\n  declarations: [\n    ProductListComponent,\n    ProductDetailComponent,\n  ],\n  imports: [\n    CommonModule,\n    ProductRoutingModule,\n    SharedModule,\n  ]\n})\nexport class ProductModule {}\n\n// app-routing.module.ts\nconst routes: Routes = [\n  {\n    path: 'users',\n    loadChildren: () => import('./user/user.module').then(m => m.UserModule)\n  },\n  {\n    path: 'products',\n    loadChildren: () => import('./product/product.module').then(m => m.ProductModule)\n  }\n];\n\n// app.module.ts - minimal\n@NgModule({\n  declarations: [AppComponent, HeaderComponent, FooterComponent],\n  imports: [\n    BrowserModule,\n    HttpClientModule,\n    AppRoutingModule,\n    CoreModule, // Singleton services\n  ],\n  bootstrap: [AppComponent]\n})\nexport class AppModule {}",
+    "language": "typescript",
+    "description": "Feature modules with lazy loading"
+  },
+  {
+    "ruleId": "bundle-preload",
+    "ruleTitle": "Use Preload Strategies for Lazy Modules",
+    "type": "bad",
+    "code": "@NgModule({\n  imports: [RouterModule.forRoot(routes)]\n  // No preloading - modules load on demand with delay\n})\nexport class AppRoutingModule {}",
+    "language": "typescript",
+    "description": "No preloading causes navigation delay"
+  },
+  {
+    "ruleId": "bundle-preload",
+    "ruleTitle": "Use Preload Strategies for Lazy Modules",
+    "type": "good",
+    "code": "import { PreloadAllModules } from '@angular/router';\n\n@NgModule({\n  imports: [\n    RouterModule.forRoot(routes, {\n      preloadingStrategy: PreloadAllModules\n    })\n  ]\n})\nexport class AppRoutingModule {}",
+    "language": "typescript",
+    "description": "Preload all modules"
+  },
+  {
+    "ruleId": "bundle-scam",
+    "ruleTitle": "Use SCAM Pattern Instead of Shared Modules",
+    "type": "bad",
+    "code": "// shared.module.ts\n@NgModule({\n  declarations: [\n    ButtonComponent,\n    CardComponent,\n    ModalComponent,\n    TooltipDirective,\n    DatePipe,\n    CurrencyPipe,\n    // 20+ more components...\n  ],\n  exports: [\n    ButtonComponent,\n    CardComponent,\n    ModalComponent,\n    TooltipDirective,\n    DatePipe,\n    CurrencyPipe,\n    // All exported even if only one is used\n  ]\n})\nexport class SharedModule {}\n\n// feature.module.ts\n@NgModule({\n  imports: [SharedModule] // Imports ALL shared components\n})\nexport class FeatureModule {}",
+    "language": "typescript",
+    "description": "Shared module with many exports"
+  },
+  {
+    "ruleId": "bundle-scam",
+    "ruleTitle": "Use SCAM Pattern Instead of Shared Modules",
+    "type": "good",
+    "code": "// button/button.component.module.ts\n@NgModule({\n  declarations: [ButtonComponent],\n  imports: [CommonModule],\n  exports: [ButtonComponent]\n})\nexport class ButtonComponentModule {}\n\n// card/card.component.module.ts\n@NgModule({\n  declarations: [CardComponent],\n  imports: [CommonModule],\n  exports: [CardComponent]\n})\nexport class CardComponentModule {}\n\n// modal/modal.component.module.ts\n@NgModule({\n  declarations: [ModalComponent],\n  imports: [CommonModule, ButtonComponentModule],\n  exports: [ModalComponent]\n})\nexport class ModalComponentModule {}\n\n// tooltip/tooltip.directive.module.ts\n@NgModule({\n  declarations: [TooltipDirective],\n  exports: [TooltipDirective]\n})\nexport class TooltipDirectiveModule {}\n\n// feature.module.ts\n@NgModule({\n  imports: [\n    ButtonComponentModule,  // Only import what you need\n    CardComponentModule\n  ]\n})\nexport class FeatureModule {}",
+    "language": "typescript",
+    "description": "SCAM pattern"
+  },
+  {
+    "ruleId": "change-rxjs-state",
+    "ruleTitle": "Use BehaviorSubject for Reactive State",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-counter',\n  template: `\n    <p>Count: {{ count }}</p>\n    <p>Double: {{ count * 2 }}</p>\n    <button (click)=\"increment()\">+</button>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class CounterComponent {\n  count = 0;\n\n  constructor(private cdr: ChangeDetectorRef) {}\n\n  increment() {\n    this.count++;\n    this.cdr.markForCheck(); // Manual trigger required\n  }\n}",
+    "language": "typescript",
+    "description": "Imperative state with manual change detection"
+  },
+  {
+    "ruleId": "change-rxjs-state",
+    "ruleTitle": "Use BehaviorSubject for Reactive State",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-counter',\n  template: `\n    <ng-container *ngIf=\"vm$ | async as vm\">\n      <p>Count: {{ vm.count }}</p>\n      <p>Double: {{ vm.double }}</p>\n    </ng-container>\n    <button (click)=\"increment()\">+</button>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class CounterComponent {\n  private countSubject = new BehaviorSubject<number>(0);\n\n  vm$ = this.countSubject.pipe(\n    map(count => ({\n      count,\n      double: count * 2\n    }))\n  );\n\n  increment() {\n    this.countSubject.next(this.countSubject.value + 1);\n    // No manual markForCheck needed - async pipe handles it\n  }\n}",
+    "language": "typescript",
+    "description": "BehaviorSubject with async pipe"
+  },
+  {
+    "ruleId": "di-factory-providers",
+    "ruleTitle": "Use Factory Providers for Complex Setup",
+    "type": "bad",
+    "code": "@Injectable({ providedIn: 'root' })\nexport class StorageService {\n  private storage: Storage;\n\n  constructor() {\n    // Complex logic in constructor - hard to test\n    if (typeof window !== 'undefined' && window.localStorage) {\n      this.storage = window.localStorage;\n    } else {\n      this.storage = new MemoryStorage();\n    }\n  }\n}",
+    "language": "typescript",
+    "description": "Complex logic in constructor"
+  },
+  {
+    "ruleId": "di-factory-providers",
+    "ruleTitle": "Use Factory Providers for Complex Setup",
+    "type": "good",
+    "code": "export abstract class StorageService {\n  abstract getItem(key: string): string | null;\n  abstract setItem(key: string, value: string): void;\n}\n\nexport class LocalStorageService extends StorageService {\n  getItem(key: string) { return localStorage.getItem(key); }\n  setItem(key: string, value: string) { localStorage.setItem(key, value); }\n}\n\nexport class MemoryStorageService extends StorageService {\n  private store = new Map<string, string>();\n  getItem(key: string) { return this.store.get(key) ?? null; }\n  setItem(key: string, value: string) { this.store.set(key, value); }\n}\n\n// app.module.ts\n@NgModule({\n  providers: [\n    {\n      provide: StorageService,\n      useFactory: (platformId: object) => {\n        return isPlatformBrowser(platformId)\n          ? new LocalStorageService()\n          : new MemoryStorageService();\n      },\n      deps: [PLATFORM_ID]\n    }\n  ]\n})\nexport class AppModule {}",
+    "language": "typescript",
+    "description": "Factory provider with deps array"
+  },
+  {
+    "ruleId": "di-injection-token",
+    "ruleTitle": "Use InjectionToken for Type-Safe Configuration",
+    "type": "bad",
+    "code": "@NgModule({\n  providers: [\n    { provide: 'API_URL', useValue: 'https://api.example.com' }\n  ]\n})\nexport class AppModule {}\n\n@Injectable({ providedIn: 'root' })\nexport class ApiService {\n  constructor(@Inject('API_URL') private apiUrl: any) {}  // No type safety\n}",
+    "language": "typescript",
+    "description": "String tokens lose type safety"
+  },
+  {
+    "ruleId": "di-injection-token",
+    "ruleTitle": "Use InjectionToken for Type-Safe Configuration",
+    "type": "good",
+    "code": "// tokens.ts\nexport interface AppConfig {\n  apiUrl: string;\n  timeout: number;\n}\n\nexport const APP_CONFIG = new InjectionToken<AppConfig>('app.config');\n\n// app.module.ts\n@NgModule({\n  providers: [\n    {\n      provide: APP_CONFIG,\n      useValue: { apiUrl: 'https://api.example.com', timeout: 5000 }\n    }\n  ]\n})\nexport class AppModule {}\n\n// api.service.ts\n@Injectable({ providedIn: 'root' })\nexport class ApiService {\n  constructor(@Inject(APP_CONFIG) private config: AppConfig) {}  // Typed!\n}",
+    "language": "typescript",
+    "description": "InjectionToken with @Inject"
+  },
+  {
+    "ruleId": "di-provided-in-root",
+    "ruleTitle": "Use providedIn root for Tree-Shaking",
+    "type": "bad",
+    "code": "@Injectable()\nexport class UserService {}\n\n@NgModule({\n  providers: [UserService]  // Always in bundle, even if unused\n})\nexport class UserModule {}",
+    "language": "typescript",
+    "description": "Service always in bundle"
+  },
+  {
+    "ruleId": "di-provided-in-root",
+    "ruleTitle": "Use providedIn root for Tree-Shaking",
+    "type": "good",
+    "code": "@Injectable({ providedIn: 'root' })\nexport class UserService {\n  constructor(private http: HttpClient) {}\n\n  getUsers(): Observable<User[]> {\n    return this.http.get<User[]>('/api/users');\n  }\n}\n\n// Inject in constructor\n@Component({...})\nexport class UserListComponent implements OnInit {\n  users$!: Observable<User[]>;\n\n  constructor(private userService: UserService) {}\n\n  ngOnInit() {\n    this.users$ = this.userService.getUsers();\n  }\n}",
+    "language": "typescript",
+    "description": "Tree-shakeable with constructor injection"
+  },
+  {
+    "ruleId": "forms-reactive",
+    "ruleTitle": "Use Reactive Forms for Complex Forms",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <form #userForm=\"ngForm\" (ngSubmit)=\"onSubmit()\">\n      <input [(ngModel)]=\"user.email\" name=\"email\" required email />\n      <input [(ngModel)]=\"user.password\" name=\"password\" required />\n      <input [(ngModel)]=\"user.confirmPassword\" name=\"confirmPassword\" />\n\n      <div *ngIf=\"userForm.controls['password']?.value !== userForm.controls['confirmPassword']?.value\">\n        Passwords don't match\n      </div>\n    </form>\n  `\n})\nexport class RegisterComponent {\n  user = { email: '', password: '', confirmPassword: '' };\n}",
+    "language": "typescript",
+    "description": "Template-driven with complex validation"
+  },
+  {
+    "ruleId": "forms-reactive",
+    "ruleTitle": "Use Reactive Forms for Complex Forms",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    <form [formGroup]=\"form\" (ngSubmit)=\"onSubmit()\">\n      <input formControlName=\"email\" />\n      <input type=\"password\" formControlName=\"password\" />\n      <input type=\"password\" formControlName=\"confirmPassword\" />\n\n      <div *ngIf=\"form.errors?.['passwordMismatch']\" class=\"error\">\n        Passwords don't match\n      </div>\n\n      <button [disabled]=\"form.invalid\">Submit</button>\n    </form>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class RegisterComponent implements OnInit {\n  form!: FormGroup;\n\n  constructor(private fb: FormBuilder) {}\n\n  ngOnInit() {\n    this.form = this.fb.group({\n      email: ['', [Validators.required, Validators.email]],\n      password: ['', [Validators.required, Validators.minLength(8)]],\n      confirmPassword: ['', Validators.required]\n    }, {\n      validators: [this.passwordMatchValidator]\n    });\n  }\n\n  passwordMatchValidator(group: FormGroup): ValidationErrors | null {\n    const password = group.get('password')?.value;\n    const confirm = group.get('confirmPassword')?.value;\n    return password === confirm ? null : { passwordMismatch: true };\n  }\n}",
+    "language": "typescript",
+    "description": "Reactive form with FormBuilder"
+  },
+  {
+    "ruleId": "forms-typed",
+    "ruleTitle": "Use Typed Reactive Forms (v14+)",
+    "type": "bad",
+    "code": "@Component({...})\nexport class ProfileComponent {\n  form = new FormGroup({\n    name: new FormControl(''),\n    email: new FormControl(''),\n    age: new FormControl(0)\n  });\n\n  onSubmit() {\n    const value = this.form.value;\n    // value is Partial<{name: string | null, ...}>\n    // Type is loose, nullable, and partial\n    console.log(value.nmae); // Typo not caught\n  }\n}",
+    "language": "typescript",
+    "description": "Untyped form"
+  },
+  {
+    "ruleId": "forms-typed",
+    "ruleTitle": "Use Typed Reactive Forms (v14+)",
+    "type": "good",
+    "code": "interface ProfileForm {\n  name: FormControl<string>;\n  email: FormControl<string>;\n  age: FormControl<number>;\n}\n\n@Component({\n  template: `\n    <form [formGroup]=\"form\" (ngSubmit)=\"onSubmit()\">\n      <input formControlName=\"name\" />\n      <input formControlName=\"email\" type=\"email\" />\n      <input formControlName=\"age\" type=\"number\" />\n      <button [disabled]=\"form.invalid\">Save</button>\n    </form>\n  `\n})\nexport class ProfileComponent {\n  form: FormGroup<ProfileForm>;\n\n  constructor(private fb: NonNullableFormBuilder) {\n    this.form = this.fb.group({\n      name: ['', Validators.required],\n      email: ['', [Validators.required, Validators.email]],\n      age: [0, [Validators.required, Validators.min(0)]]\n    });\n  }\n\n  onSubmit() {\n    // getRawValue() returns fully typed, non-nullable object\n    const value = this.form.getRawValue();\n    // Type: { name: string; email: string; age: number }\n\n    // Compile error: Property 'nmae' does not exist\n    // console.log(value.nmae);\n\n    this.saveProfile(value);\n  }\n\n  // Safe typed access\n  get nameControl() {\n    return this.form.controls.name; // FormControl<string>\n  }\n}",
+    "language": "typescript",
+    "description": "Typed form with NonNullableFormBuilder"
+  },
+  {
+    "ruleId": "http-interceptors",
+    "ruleTitle": "Use Class-Based HTTP Interceptors",
+    "type": "bad",
+    "code": "@Injectable({ providedIn: 'root' })\nexport class UserService {\n  constructor(private http: HttpClient, private authService: AuthService) {}\n\n  getUsers(): Observable<User[]> {\n    // Auth header added manually in every method\n    const headers = new HttpHeaders().set(\n      'Authorization', `Bearer ${this.authService.getToken()}`\n    );\n    return this.http.get<User[]>('/api/users', { headers });\n  }\n}",
+    "language": "typescript",
+    "description": "Duplicated auth logic in services"
+  },
+  {
+    "ruleId": "http-interceptors",
+    "ruleTitle": "Use Class-Based HTTP Interceptors",
+    "type": "good",
+    "code": "@Injectable()\nexport class AuthInterceptor implements HttpInterceptor {\n  constructor(private authService: AuthService) {}\n\n  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {\n    const token = this.authService.getToken();\n    if (token) {\n      req = req.clone({\n        setHeaders: { Authorization: `Bearer ${token}` }\n      });\n    }\n    return next.handle(req);\n  }\n}\n\n// app.module.ts\n@NgModule({\n  providers: [\n    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }\n  ]\n})\nexport class AppModule {}\n\n// Services are now clean\n@Injectable({ providedIn: 'root' })\nexport class UserService {\n  constructor(private http: HttpClient) {}\n\n  getUsers(): Observable<User[]> {\n    return this.http.get<User[]>('/api/users');  // No auth logic needed\n  }\n}",
+    "language": "typescript",
+    "description": "Class-based interceptor"
+  },
+  {
+    "ruleId": "http-transfer-state",
+    "ruleTitle": "Use TransferState for SSR",
+    "type": "bad",
+    "code": "@Component({...})\nexport class ProductListComponent implements OnInit {\n  products: Product[] = [];\n\n  constructor(private http: HttpClient) {}\n\n  ngOnInit() {\n    // Runs on server AND client = 2 requests\n    this.http.get<Product[]>('/api/products')\n      .subscribe(products => this.products = products);\n  }\n}",
+    "language": "typescript",
+    "description": "Duplicate requests"
+  },
+  {
+    "ruleId": "http-transfer-state",
+    "ruleTitle": "Use TransferState for SSR",
+    "type": "good",
+    "code": "import { TransferState, makeStateKey } from '@angular/platform-browser';\nimport { isPlatformServer } from '@angular/common';\n\nconst PRODUCTS_KEY = makeStateKey<Product[]>('products');\n\n@Component({\n  template: `\n    <div *ngFor=\"let product of products; trackBy: trackById\">\n      {{ product.name }}\n    </div>\n  `\n})\nexport class ProductListComponent implements OnInit {\n  products: Product[] = [];\n\n  constructor(\n    private http: HttpClient,\n    private transferState: TransferState,\n    @Inject(PLATFORM_ID) private platformId: Object\n  ) {}\n\n  ngOnInit() {\n    // Check if data was transferred from server\n    if (this.transferState.hasKey(PRODUCTS_KEY)) {\n      this.products = this.transferState.get(PRODUCTS_KEY, []);\n      this.transferState.remove(PRODUCTS_KEY);\n    } else {\n      this.http.get<Product[]>('/api/products').subscribe(products => {\n        this.products = products;\n        // Store on server for client\n        if (isPlatformServer(this.platformId)) {\n          this.transferState.set(PRODUCTS_KEY, products);\n        }\n      });\n    }\n  }\n\n  trackById = (index: number, product: Product) => product.id;\n}",
+    "language": "typescript",
+    "description": "Manual TransferState"
+  },
+  {
+    "ruleId": "rxjs-async-pipe",
+    "ruleTitle": "Use Async Pipe Instead of Manual Subscribe",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <div *ngIf=\"user\">\n      <h1>{{ user.name }}</h1>\n    </div>\n  `\n})\nexport class UserProfileComponent implements OnInit, OnDestroy {\n  user: User | null = null;\n  private subscription!: Subscription;\n\n  constructor(private userService: UserService) {}\n\n  ngOnInit() {\n    this.subscription = this.userService.getCurrentUser()\n      .subscribe(user => this.user = user);\n  }\n\n  ngOnDestroy() {\n    this.subscription.unsubscribe();  // Easy to forget\n  }\n}",
+    "language": "typescript",
+    "description": "Manual subscription"
+  },
+  {
+    "ruleId": "rxjs-async-pipe",
+    "ruleTitle": "Use Async Pipe Instead of Manual Subscribe",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    <div *ngIf=\"user$ | async as user\">\n      <h1>{{ user.name }}</h1>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserProfileComponent {\n  user$ = this.userService.getCurrentUser();\n\n  constructor(private userService: UserService) {}\n  // No manual subscribe/unsubscribe needed\n}",
+    "language": "typescript",
+    "description": "Async pipe handles lifecycle"
+  },
+  {
+    "ruleId": "rxjs-takeuntil",
+    "ruleTitle": "Use Subject with takeUntil for Cleanup",
+    "type": "bad",
+    "code": "@Component({...})\nexport class DataComponent implements OnInit, OnDestroy {\n  private sub1!: Subscription;\n  private sub2!: Subscription;\n\n  ngOnInit() {\n    this.sub1 = this.dataService.getData()\n      .subscribe(data => this.processData(data));\n    this.sub2 = this.eventService.events$\n      .subscribe(event => this.handleEvent(event));\n  }\n\n  ngOnDestroy() {\n    this.sub1.unsubscribe();  // Easy to forget one\n    this.sub2.unsubscribe();\n  }\n}",
+    "language": "typescript",
+    "description": "Manual subscription management"
+  },
+  {
+    "ruleId": "rxjs-takeuntil",
+    "ruleTitle": "Use Subject with takeUntil for Cleanup",
+    "type": "good",
+    "code": "@Component({...})\nexport class DataComponent implements OnInit, OnDestroy {\n  private destroy$ = new Subject<void>();\n\n  ngOnInit() {\n    this.dataService.getData()\n      .pipe(takeUntil(this.destroy$))\n      .subscribe(data => this.processData(data));\n\n    this.eventService.events$\n      .pipe(takeUntil(this.destroy$))\n      .subscribe(event => this.handleEvent(event));\n  }\n\n  ngOnDestroy() {\n    this.destroy$.next();\n    this.destroy$.complete();\n  }\n}",
+    "language": "typescript",
+    "description": "Subject with takeUntil pattern"
+  },
+  {
+    "ruleId": "template-ng-optimized-image",
+    "ruleTitle": "Use NgOptimizedImage for Images (v15+)",
+    "type": "bad",
+    "code": "<img src=\"/assets/hero.jpg\" alt=\"Hero image\">\n<img src=\"{{ user.avatar }}\" alt=\"User avatar\">",
+    "language": "html",
+    "description": "Native img"
+  },
+  {
+    "ruleId": "template-ng-optimized-image",
+    "ruleTitle": "Use NgOptimizedImage for Images (v15+)",
+    "type": "good",
+    "code": "// app.module.ts\nimport { NgOptimizedImage } from '@angular/common';\n\n@NgModule({\n  imports: [NgOptimizedImage]\n})\nexport class AppModule {}\n\n// component.ts\n@Component({\n  template: `\n    <!-- Priority image (LCP candidate) -->\n    <img\n      ngSrc=\"/assets/hero.jpg\"\n      alt=\"Hero image\"\n      width=\"1200\"\n      height=\"600\"\n      priority\n    />\n\n    <!-- Lazy loaded (below fold) -->\n    <img\n      [ngSrc]=\"user.avatar\"\n      alt=\"User avatar\"\n      width=\"64\"\n      height=\"64\"\n    />\n\n    <!-- Fill mode -->\n    <div class=\"image-container\">\n      <img\n        ngSrc=\"/assets/product.jpg\"\n        alt=\"Product\"\n        fill\n        sizes=\"(max-width: 768px) 100vw, 50vw\"\n      />\n    </div>\n  `,\n  styles: [`\n    .image-container {\n      position: relative;\n      width: 100%;\n      aspect-ratio: 4/3;\n    }\n  `]\n})\nexport class ProductComponent {}",
+    "language": "typescript",
+    "description": "NgOptimizedImage"
+  },
+  {
+    "ruleId": "template-pure-pipes",
+    "ruleTitle": "Use Pure Pipes for Data Transformation",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <div *ngFor=\"let product of products; trackBy: trackById\">\n      <span>{{ formatPrice(product.price) }}</span>\n    </div>\n  `\n})\nexport class ProductListComponent {\n  formatPrice(price: number): string {\n    // Called on EVERY change detection cycle\n    return new Intl.NumberFormat('en-US', {\n      style: 'currency',\n      currency: 'USD'\n    }).format(price);\n  }\n}",
+    "language": "typescript",
+    "description": "Method called on every change detection"
+  },
+  {
+    "ruleId": "template-pure-pipes",
+    "ruleTitle": "Use Pure Pipes for Data Transformation",
+    "type": "good",
+    "code": "@Pipe({ name: 'price' })\nexport class PricePipe implements PipeTransform {\n  transform(value: number, currency = 'USD'): string {\n    return new Intl.NumberFormat('en-US', {\n      style: 'currency',\n      currency\n    }).format(value);\n  }\n}\n\n@Component({\n  template: `\n    <div *ngFor=\"let product of products; trackBy: trackById\">\n      <span>{{ product.price | price }}</span>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class ProductListComponent {\n  trackById = (index: number, product: Product) => product.id;\n}",
+    "language": "typescript",
+    "description": "Pure pipe only runs when input changes"
+  },
+  {
+    "ruleId": "template-trackby",
+    "ruleTitle": "Use trackBy with *ngFor",
+    "type": "bad",
+    "code": "@Component({\n  template: `\n    <div *ngFor=\"let user of users\">\n      <app-user-card [user]=\"user\"></app-user-card>\n    </div>\n  `\n})\nexport class UserListComponent {\n  users: User[] = [];\n\n  refresh() {\n    // New array = all DOM destroyed and recreated\n    this.users = [...this.fetchedUsers];\n  }\n}",
+    "language": "typescript",
+    "description": "DOM recreated on every update"
+  },
+  {
+    "ruleId": "template-trackby",
+    "ruleTitle": "Use trackBy with *ngFor",
+    "type": "good",
+    "code": "@Component({\n  template: `\n    <div *ngFor=\"let user of users; trackBy: trackById\">\n      <app-user-card [user]=\"user\"></app-user-card>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserListComponent {\n  users: User[] = [];\n\n  trackById(index: number, user: User): number {\n    return user.id;\n  }\n}",
+    "language": "typescript",
+    "description": "trackBy enables DOM reuse"
+  }
+]
