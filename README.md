@@ -7,7 +7,7 @@ Performance optimization guidelines for Angular applications, designed for AI ag
 Install the skill into your Angular project:
 
 ```bash
-npx add-skill develite98/angular-best-practices
+npx skills add develite98/angular-best-practices
 ```
 
 Select the version that matches your Angular project:
@@ -38,7 +38,7 @@ Each skill contains 20+ rules across 8 categories:
 angular-best-practices/
 ├── skills/                              # Published skills
 │   ├── angular-best-practices-v20+/
-│   │   ├── SKILL.md                     # Skill metadata (for add-skill CLI)
+│   │   ├── SKILL.md                     # Skill metadata (for skills CLI)
 │   │   ├── AGENTS.md                    # Compiled rules (AI reads this)
 │   │   ├── metadata.json                # Build metadata
 │   │   └── rules/                       # Version-specific rules
