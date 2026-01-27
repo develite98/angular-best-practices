@@ -1,5 +1,45 @@
 [
   {
+    "ruleId": "arch-smart-dumb-components",
+    "ruleTitle": "Use Smart and Dumb Component Pattern",
+    "type": "bad",
+    "code": "// ❌ One component handles data, logic, AND presentation\n@Component({\n  selector: 'app-user-dashboard',\n  template: `\n    <div class=\"dashboard\">\n      <h1>Welcome, {{ user?.name }}</h1>\n      @if (loading) {\n        <div class=\"spinner\">Loading...</div>\n      }\n      @for (order of orders; track order.id) {\n        <div class=\"order-card\" [class.urgent]=\"isUrgent(order)\">\n          <h3>Order #{{ order.id }}</h3>\n          <p>{{ order.date | date }}</p>\n          <p>{{ formatPrice(order.total) }}</p>\n          <button (click)=\"cancelOrder(order)\">Cancel</button>\n          <button (click)=\"viewDetails(order)\">Details</button>\n        </div>\n      }\n      <form [formGroup]=\"filterForm\" (ngSubmit)=\"applyFilters()\">\n        <!-- complex filter form -->\n      </form>\n    </div>\n  `\n})\nexport class UserDashboardComponent implements OnInit {\n  user: User | null = null;\n  orders: Order[] = [];\n  loading = true;\n  filterForm: FormGroup;\n\n  constructor(\n    private userService: UserService,\n    private orderService: OrderService,\n    private router: Router,\n    private fb: FormBuilder,\n    private analytics: AnalyticsService\n  ) {\n    this.filterForm = this.fb.group({...});\n  }\n\n  ngOnInit() {\n    this.loadUser();\n    this.loadOrders();\n  }\n\n  loadUser() { /* ... */ }\n  loadOrders() { /* ... */ }\n  isUrgent(order: Order): boolean { /* ... */ }\n  formatPrice(price: number): string { /* ... */ }\n  cancelOrder(order: Order) { /* ... */ }\n  viewDetails(order: Order) { /* ... */ }\n  applyFilters() { /* ... */ }\n  // 500+ lines of mixed concerns\n}",
+    "language": "typescript",
+    "description": "God component doing everything"
+  },
+  {
+    "ruleId": "arch-smart-dumb-components",
+    "ruleTitle": "Use Smart and Dumb Component Pattern",
+    "type": "good",
+    "code": "// ✅ DUMB Component - single order card\n@Component({\n  selector: 'app-order-card',\n  template: `\n    <div class=\"order-card\" [class.urgent]=\"isUrgent()\">\n      <h3>Order #{{ order().id }}</h3>\n      <p>{{ order().date | date }}</p>\n      <p>{{ order().total | currency }}</p>\n      <button (click)=\"cancel.emit()\">Cancel</button>\n      <button (click)=\"viewDetails.emit()\">Details</button>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class OrderCardComponent {\n  order = input.required<Order>();\n\n  cancel = output<void>();\n  viewDetails = output<void>();\n\n  // Pure computation, no side effects\n  isUrgent = computed(() => {\n    const daysOld = this.getDaysOld(this.order().date);\n    return this.order().status === 'pending' && daysOld > 3;\n  });\n\n  private getDaysOld(date: Date): number {\n    return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));\n  }\n}",
+    "language": "typescript",
+    "description": "Smart + Dumb separation"
+  },
+  {
+    "ruleId": "bundle-no-barrel-imports",
+    "ruleTitle": "Avoid Barrel File Imports",
+    "type": "bad",
+    "code": "// Even worse - wildcard imports\nimport * as Services from './services';\n\n// Using only one service, but entire barrel is included\nconstructor(private userService: Services.UserService) {}",
+    "language": "typescript",
+    "description": "Barrel imports"
+  },
+  {
+    "ruleId": "bundle-no-barrel-imports",
+    "ruleTitle": "Avoid Barrel File Imports",
+    "type": "good",
+    "code": "// For commonly used utilities, create small focused barrels\n// utils/date/index.ts - small, focused barrel (OK)\nexport { formatDate } from './format-date';\nexport { parseDate } from './parse-date';\n\n// utils/string/index.ts - separate barrel for strings\nexport { capitalize } from './capitalize';\nexport { truncate } from './truncate';\n\n// Instead of one massive utils/index.ts",
+    "language": "typescript",
+    "description": "Direct imports"
+  },
+  {
+    "ruleId": "bundle-no-barrel-imports",
+    "ruleTitle": "Avoid Barrel File Imports",
+    "type": "good",
+    "code": "// Consumer code - tree-shakeable imports\nimport { Button } from '@myorg/ui-components/button';\n// Only button code is bundled",
+    "language": "typescript",
+    "description": "Package exports for libraries"
+  },
+  {
     "ruleId": "change-detach-reattach",
     "ruleTitle": "Detach Change Detector for Heavy Operations",
     "type": "bad",
@@ -48,6 +88,116 @@
     "description": "Run outside zone, enter for UI updates"
   },
   {
+    "ruleId": "css-content-visibility",
+    "ruleTitle": "Use CSS content-visibility for Off-Screen Content",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-message-list',\n  template: `\n    <div class=\"messages\">\n      <!-- All 1000 messages rendered and laid out immediately -->\n      @for (message of messages; track message.id) {\n        <div class=\"message\">\n          <app-avatar [user]=\"message.author\" />\n          <div class=\"content\">{{ message.text }}</div>\n          <span class=\"time\">{{ message.time | date:'short' }}</span>\n        </div>\n      }\n    </div>\n  `,\n  styles: [`\n    .message {\n      padding: 12px;\n      border-bottom: 1px solid #eee;\n    }\n  `]\n})\nexport class MessageListComponent {\n  messages: Message[] = []; // 1000+ messages\n}",
+    "language": "typescript",
+    "description": "renders all items immediately"
+  },
+  {
+    "ruleId": "css-content-visibility",
+    "ruleTitle": "Use CSS content-visibility for Off-Screen Content",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-message-list',\n  template: `\n    <div class=\"messages\">\n      @for (message of messages; track message.id) {\n        <div class=\"message\">\n          <app-avatar [user]=\"message.author\" />\n          <div class=\"content\">{{ message.text }}</div>\n          <span class=\"time\">{{ message.time | date:'short' }}</span>\n        </div>\n      }\n    </div>\n  `,\n  styles: [`\n    .message {\n      padding: 12px;\n      border-bottom: 1px solid #eee;\n\n      /* ✅ Skip layout/paint for off-screen items */\n      content-visibility: auto;\n\n      /* Hint at size to prevent layout shift when scrolling */\n      contain-intrinsic-size: 0 80px;\n    }\n  `]\n})\nexport class MessageListComponent {\n  messages: Message[] = []; // 1000+ messages - no problem!\n}",
+    "language": "typescript",
+    "description": "defers off-screen rendering"
+  },
+  {
+    "ruleId": "js-combine-iterations",
+    "ruleTitle": "Combine Multiple Array Iterations",
+    "type": "bad",
+    "code": "@Component({...})\nexport class UserStatsComponent {\n  users: User[] = [];\n\n  getStats() {\n    // ❌ Iterates users array 3 times\n    const admins = this.users.filter(u => u.role === 'admin');\n    const activeUsers = this.users.filter(u => u.isActive);\n    const totalAge = this.users.reduce((sum, u) => sum + u.age, 0);\n\n    return { admins, activeUsers, averageAge: totalAge / this.users.length };\n  }\n}",
+    "language": "typescript",
+    "description": "3 iterations over same array"
+  },
+  {
+    "ruleId": "js-combine-iterations",
+    "ruleTitle": "Combine Multiple Array Iterations",
+    "type": "good",
+    "code": "@Component({...})\nexport class UserStatsComponent {\n  users: User[] = [];\n\n  getStats() {\n    // ✅ Single iteration, multiple results\n    const admins: User[] = [];\n    const activeUsers: User[] = [];\n    let totalAge = 0;\n\n    for (const user of this.users) {\n      if (user.role === 'admin') admins.push(user);\n      if (user.isActive) activeUsers.push(user);\n      totalAge += user.age;\n    }\n\n    return { admins, activeUsers, averageAge: totalAge / this.users.length };\n  }\n}",
+    "language": "typescript",
+    "description": "1 iteration"
+  },
+  {
+    "ruleId": "js-set-map-lookups",
+    "ruleTitle": "Use Set/Map for O(1) Lookups",
+    "type": "bad",
+    "code": "@Component({...})\nexport class UserListComponent {\n  users: User[] = [];\n  selectedIds: string[] = [];\n\n  isSelected(userId: string): boolean {\n    // ❌ O(n) - scans entire array for each check\n    return this.selectedIds.includes(userId);\n  }\n\n  // With 1000 users and 100 selected, this is 100,000 comparisons\n  // Called on every change detection cycle!\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "js-set-map-lookups",
+    "ruleTitle": "Use Set/Map for O(1) Lookups",
+    "type": "good",
+    "code": "@Component({...})\nexport class UserListComponent {\n  users: User[] = [];\n  selectedIds = new Set<string>();\n\n  isSelected(userId: string): boolean {\n    // ✅ O(1) - instant hash lookup\n    return this.selectedIds.has(userId);\n  }\n\n  toggleSelection(userId: string) {\n    if (this.selectedIds.has(userId)) {\n      this.selectedIds.delete(userId);\n    } else {\n      this.selectedIds.add(userId);\n    }\n  }\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "bad",
+    "code": "// ❌ Subscription lives forever after component destroyed\n@Component({...})\nexport class DashboardComponent implements OnInit {\n  ngOnInit() {\n    // This subscription NEVER gets cleaned up\n    this.dataService.getData().subscribe(data => {\n      this.data = data;\n    });\n\n    // Interval runs forever, even after navigation\n    setInterval(() => this.refresh(), 5000);\n\n    // Event listener never removed\n    window.addEventListener('resize', this.onResize);\n  }\n\n  onResize = () => {\n    this.width = window.innerWidth;\n  };\n}",
+    "language": "typescript",
+    "description": "Subscription not cleaned up"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "good",
+    "code": "// ✅ Modern approach: takeUntilDestroyed (Angular 16+)\n@Component({...})\nexport class DashboardComponent {\n  private destroyRef = inject(DestroyRef);\n\n  data$ = this.dataService.getData().pipe(\n    takeUntilDestroyed(this.destroyRef)\n  );\n\n  constructor() {\n    // Auto-cleaned up when component destroys\n    interval(5000).pipe(\n      takeUntilDestroyed(this.destroyRef)\n    ).subscribe(() => this.refresh());\n  }\n}\n\n// ✅ Classic approach: Subject + takeUntil\n@Component({...})\nexport class DashboardComponent implements OnInit, OnDestroy {\n  private destroy$ = new Subject<void>();\n\n  ngOnInit() {\n    this.dataService.getData().pipe(\n      takeUntil(this.destroy$)\n    ).subscribe(data => this.data = data);\n  }\n\n  ngOnDestroy() {\n    this.destroy$.next();\n    this.destroy$.complete();\n  }\n}",
+    "language": "typescript",
+    "description": "Proper cleanup"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "bad",
+    "code": "// ❌ setInterval runs forever\n@Component({...})\nexport class PollingComponent implements OnInit {\n  ngOnInit() {\n    setInterval(() => {\n      this.fetchData(); // Runs even after component destroyed!\n    }, 3000);\n  }\n}",
+    "language": "typescript",
+    "description": "Timer/Interval not cleared"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "good",
+    "code": "// ✅ Option 1: Use RxJS interval with takeUntilDestroyed\n@Component({...})\nexport class PollingComponent {\n  private destroyRef = inject(DestroyRef);\n\n  constructor() {\n    interval(3000).pipe(\n      takeUntilDestroyed(this.destroyRef),\n      switchMap(() => this.dataService.fetch())\n    ).subscribe(data => this.data = data);\n  }\n}\n\n// ✅ Option 2: Manual cleanup with clearInterval\n@Component({...})\nexport class PollingComponent implements OnInit, OnDestroy {\n  private intervalId?: ReturnType<typeof setInterval>;\n\n  ngOnInit() {\n    this.intervalId = setInterval(() => this.fetchData(), 3000);\n  }\n\n  ngOnDestroy() {\n    if (this.intervalId) {\n      clearInterval(this.intervalId);\n    }\n  }\n}\n\n// ✅ Option 3: setTimeout with recursive call\n@Component({...})\nexport class PollingComponent implements OnDestroy {\n  private timeoutId?: ReturnType<typeof setTimeout>;\n  private isDestroyed = false;\n\n  ngOnInit() {\n    this.poll();\n  }\n\n  private poll() {\n    if (this.isDestroyed) return;\n\n    this.fetchData();\n    this.timeoutId = setTimeout(() => this.poll(), 3000);\n  }\n\n  ngOnDestroy() {\n    this.isDestroyed = true;\n    if (this.timeoutId) {\n      clearTimeout(this.timeoutId);\n    }\n  }\n}",
+    "language": "typescript",
+    "description": "Clear timers"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "bad",
+    "code": "// ❌ Window listener persists forever\n@Component({...})\nexport class ResponsiveComponent implements OnInit {\n  ngOnInit() {\n    window.addEventListener('resize', this.handleResize);\n    document.addEventListener('click', this.handleClick);\n  }\n\n  handleResize = () => { /* ... */ };\n  handleClick = () => { /* ... */ };\n}",
+    "language": "typescript",
+    "description": "Event listener not removed"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "good",
+    "code": "// ✅ Option 1: Manual cleanup\n@Component({...})\nexport class ResponsiveComponent implements OnInit, OnDestroy {\n  // Must use arrow function or bind to keep 'this' reference\n  private handleResize = () => {\n    this.width = window.innerWidth;\n  };\n\n  ngOnInit() {\n    window.addEventListener('resize', this.handleResize);\n  }\n\n  ngOnDestroy() {\n    window.removeEventListener('resize', this.handleResize);\n  }\n}\n\n// ✅ Option 2: RxJS fromEvent (recommended)\n@Component({...})\nexport class ResponsiveComponent {\n  private destroyRef = inject(DestroyRef);\n\n  width$ = fromEvent(window, 'resize').pipe(\n    debounceTime(100),\n    map(() => window.innerWidth),\n    startWith(window.innerWidth),\n    takeUntilDestroyed(this.destroyRef)\n  );\n}\n\n// ✅ Option 3: Renderer2 for SSR compatibility\n@Component({...})\nexport class ResponsiveComponent implements OnInit, OnDestroy {\n  private renderer = inject(Renderer2);\n  private unlistenFn?: () => void;\n\n  ngOnInit() {\n    this.unlistenFn = this.renderer.listen('window', 'resize', () => {\n      this.width = window.innerWidth;\n    });\n  }\n\n  ngOnDestroy() {\n    this.unlistenFn?.();\n  }\n}",
+    "language": "typescript",
+    "description": "Remove listeners"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "bad",
+    "code": "// ❌ Service holds reference to destroyed component\n@Injectable({ providedIn: 'root' })\nexport class ModalService {\n  private openModals: ModalComponent[] = [];\n\n  register(modal: ModalComponent) {\n    this.openModals.push(modal);\n    // Never removed - component reference held forever!\n  }\n}",
+    "language": "typescript",
+    "description": "Holding references to destroyed elements"
+  },
+  {
+    "ruleId": "perf-memory-leaks",
+    "ruleTitle": "Prevent Memory Leaks",
+    "type": "good",
+    "code": "// ✅ Properly manage references\n@Injectable({ providedIn: 'root' })\nexport class ModalService {\n  private openModals = new Set<ModalComponent>();\n\n  register(modal: ModalComponent) {\n    this.openModals.add(modal);\n  }\n\n  unregister(modal: ModalComponent) {\n    this.openModals.delete(modal);\n  }\n}\n\n@Component({...})\nexport class ModalComponent implements OnDestroy {\n  private modalService = inject(ModalService);\n\n  constructor() {\n    this.modalService.register(this);\n  }\n\n  ngOnDestroy() {\n    this.modalService.unregister(this);\n  }\n}",
+    "language": "typescript",
+    "description": "Clean up references"
+  },
+  {
     "ruleId": "perf-web-workers",
     "ruleTitle": "Offload Heavy Computation to Web Workers",
     "type": "bad",
@@ -62,6 +212,110 @@
     "code": "// ng generate web-worker data-processor\n\n// data-processor.worker.ts\naddEventListener('message', ({ data }) => {\n  const result = heavyComputation(data);\n  postMessage(result);\n});\n\n// data-processor.component.ts\n@Component({\n  template: `\n    <button (click)=\"processData()\" [disabled]=\"isProcessing()\">\n      {{ isProcessing() ? 'Processing...' : 'Process' }}\n    </button>\n    <div>Result: {{ result() }}</div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class DataProcessorComponent {\n  result = signal('');\n  isProcessing = signal(false);\n  private worker = new Worker(\n    new URL('./data-processor.worker', import.meta.url)\n  );\n\n  constructor() {\n    this.worker.onmessage = ({ data }) => {\n      this.result.set(data);\n      this.isProcessing.set(false);\n    };\n  }\n\n  processData() {\n    this.isProcessing.set(true);\n    this.worker.postMessage(this.generateLargeDataset());\n  }\n}",
     "language": "typescript",
     "description": "Web Worker keeps UI responsive"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "bad",
+    "code": "// ❌ mergeMap - All requests run parallel, results arrive out of order\nsearchControl.valueChanges.pipe(\n  mergeMap(query => this.searchService.search(query))\n).subscribe(results => {\n  this.results = results; // May show stale results from slow old request!\n});\n\n// ❌ concatMap - Queues all requests, user waits for old queries\nsearchControl.valueChanges.pipe(\n  concatMap(query => this.searchService.search(query))\n).subscribe(results => {\n  this.results = results; // Slow - waits for each request sequentially\n});",
+    "language": "typescript",
+    "description": "Wrong operator for search"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "good",
+    "code": "// ✅ switchMap - Cancels previous request, only latest matters\nsearchControl.valueChanges.pipe(\n  debounceTime(300),\n  distinctUntilChanged(),\n  switchMap(query => this.searchService.search(query))\n).subscribe(results => {\n  this.results = results; // Always shows results for latest query\n});",
+    "language": "typescript",
+    "description": "switchMap for search"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "bad",
+    "code": "// ❌ switchMap - User double-clicks, first submit is cancelled!\nsubmitForm$.pipe(\n  switchMap(() => this.orderService.placeOrder(this.form.value))\n).subscribe();\n// First order never placed if user clicks twice quickly\n\n// ❌ mergeMap - Both submits go through, duplicate orders!\nsubmitForm$.pipe(\n  mergeMap(() => this.orderService.placeOrder(this.form.value))\n).subscribe();\n// User gets charged twice",
+    "language": "typescript",
+    "description": "Wrong operator for form submit"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "good",
+    "code": "// ✅ exhaustMap - Ignores clicks while request is pending\nsubmitForm$.pipe(\n  exhaustMap(() => {\n    this.isSubmitting = true;\n    return this.orderService.placeOrder(this.form.value).pipe(\n      finalize(() => this.isSubmitting = false)\n    );\n  })\n).subscribe({\n  next: (order) => this.router.navigate(['/order', order.id]),\n  error: (err) => this.showError(err)\n});\n// Double-clicks ignored, only one order placed",
+    "language": "typescript",
+    "description": "exhaustMap for form submit"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "bad",
+    "code": "// ❌ switchMap - Later items cancel earlier ones!\nitemsToSave$.pipe(\n  switchMap(item => this.saveItem(item))\n).subscribe();\n// Only last item gets saved\n\n// ❌ mergeMap - Order not guaranteed, race conditions\nitemsToSave$.pipe(\n  mergeMap(item => this.saveItem(item))\n).subscribe();\n// Items may save out of order, causing data inconsistency",
+    "language": "typescript",
+    "description": "Wrong operator for sequential writes"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "good",
+    "code": "// ✅ concatMap - Each completes before next starts\nitemsToSave$.pipe(\n  concatMap(item => this.saveItem(item))\n).subscribe({\n  complete: () => console.log('All items saved in order')\n});\n// Guaranteed order: item1 saved, then item2, then item3...",
+    "language": "typescript",
+    "description": "concatMap for sequential writes"
+  },
+  {
+    "ruleId": "rxjs-mapping-operators",
+    "ruleTitle": "Use Correct RxJS Mapping Operators",
+    "type": "good",
+    "code": "// ✅ mergeMap - When order doesn't matter and parallel is faster\nnotificationIds$.pipe(\n  mergeMap(\n    id => this.markAsRead(id),\n    5 // Optional: limit concurrent requests to 5\n  )\n).subscribe();\n// All notifications marked as read in parallel, fastest completion",
+    "language": "typescript",
+    "description": "mergeMap for parallel independent operations"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "bad",
+    "code": "// ❌ Callback hell, inner subscription never cleaned up\n@Component({...})\nexport class OrderDetailsComponent implements OnInit {\n  ngOnInit() {\n    this.route.params.subscribe(params => {\n      this.orderService.getOrder(params['id']).subscribe(order => {\n        this.order = order;\n        this.userService.getUser(order.userId).subscribe(user => {\n          this.user = user;\n          this.addressService.getAddress(user.addressId).subscribe(address => {\n            this.address = address;\n            // 4 levels deep, impossible to maintain\n            // Memory leak: inner subscriptions never unsubscribed\n          });\n        });\n      });\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Nested subscriptions"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "good",
+    "code": "// ✅ Flat, readable, properly managed\n@Component({...})\nexport class OrderDetailsComponent implements OnDestroy {\n  private destroy$ = new Subject<void>();\n\n  order$ = this.route.params.pipe(\n    map(params => params['id']),\n    switchMap(id => this.orderService.getOrder(id)),\n    takeUntil(this.destroy$)\n  );\n\n  user$ = this.order$.pipe(\n    switchMap(order => this.userService.getUser(order.userId))\n  );\n\n  address$ = this.user$.pipe(\n    switchMap(user => this.addressService.getAddress(user.addressId))\n  );\n\n  // Or combine all data into one stream\n  vm$ = this.route.params.pipe(\n    map(params => params['id']),\n    switchMap(id => this.orderService.getOrder(id)),\n    switchMap(order => forkJoin({\n      order: of(order),\n      user: this.userService.getUser(order.userId)\n    })),\n    switchMap(({ order, user }) => forkJoin({\n      order: of(order),\n      user: of(user),\n      address: this.addressService.getAddress(user.addressId)\n    })),\n    takeUntil(this.destroy$)\n  );\n\n  ngOnDestroy() {\n    this.destroy$.next();\n    this.destroy$.complete();\n  }\n}",
+    "language": "typescript",
+    "description": "Use operators to compose"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "bad",
+    "code": "// ❌ Nested subscribe for conditional fetch\nthis.authService.currentUser$.subscribe(user => {\n  if (user) {\n    this.userService.getProfile(user.id).subscribe(profile => {\n      this.profile = profile;\n    });\n  }\n});",
+    "language": "typescript",
+    "description": "Nested subscribe for conditional logic"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "good",
+    "code": "// ✅ Operators handle the conditional\nthis.authService.currentUser$.pipe(\n  filter((user): user is User => user !== null),\n  switchMap(user => this.userService.getProfile(user.id)),\n  takeUntilDestroyed()\n).subscribe(profile => {\n  this.profile = profile;\n});",
+    "language": "typescript",
+    "description": "Use filter and switchMap"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "bad",
+    "code": "// ❌ Subscribe just to call another method\nthis.items$.subscribe(items => {\n  this.processItems(items).subscribe(result => {\n    this.saveResult(result).subscribe(() => {\n      console.log('Done');\n    });\n  });\n});",
+    "language": "typescript",
+    "description": "Subscribe to trigger side effects"
+  },
+  {
+    "ruleId": "rxjs-no-nested-subscribe",
+    "ruleTitle": "Avoid Nested Subscriptions",
+    "type": "good",
+    "code": "// ✅ Single subscription with operator chain\nthis.items$.pipe(\n  concatMap(items => this.processItems(items)),\n  concatMap(result => this.saveResult(result)),\n  takeUntilDestroyed()\n).subscribe({\n  next: () => console.log('Done'),\n  error: (err) => console.error('Pipeline failed:', err)\n});",
+    "language": "typescript",
+    "description": "Chain with operators"
   },
   {
     "ruleId": "rxjs-operators",
@@ -94,6 +348,54 @@
     "code": "@Component({\n  template: `\n    @if (user$ | async; as user) {\n      <h1>{{ user.name }}</h1>\n      <p>{{ user.email }}</p>\n      <img [src]=\"user.avatar\" />\n    }\n  `\n})\nexport class UserProfileComponent {\n  user$ = this.http.get<User>('/api/user').pipe(\n    shareReplay({ bufferSize: 1, refCount: true })\n  );\n}",
     "language": "typescript",
     "description": "Share observable among subscribers"
+  },
+  {
+    "ruleId": "template-no-function-calls",
+    "ruleTitle": "Avoid Function Calls in Templates",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-user-card',\n  template: `\n    <div class=\"user\">\n      <!-- getFullName() runs 100+ times on scroll, clicks, any event -->\n      <h2>{{ getFullName() }}</h2>\n      <span>{{ calculateAge(user.birthDate) }}</span>\n      <p>{{ formatAddress(user.address) }}</p>\n    </div>\n  `\n})\nexport class UserCardComponent {\n  @Input() user!: User;\n\n  getFullName(): string {\n    console.log('getFullName called'); // Logs hundreds of times!\n    return `${this.user.firstName} ${this.user.lastName}`;\n  }\n\n  calculateAge(birthDate: Date): number {\n    const today = new Date();\n    return today.getFullYear() - birthDate.getFullYear();\n  }\n\n  formatAddress(address: Address): string {\n    return `${address.street}, ${address.city}`;\n  }\n}",
+    "language": "typescript",
+    "description": "Function called on every cycle"
+  },
+  {
+    "ruleId": "template-no-function-calls",
+    "ruleTitle": "Avoid Function Calls in Templates",
+    "type": "good",
+    "code": "// Option 1: Pure Pipe (recommended for reusable transformations)\n@Pipe({ name: 'fullName', standalone: true, pure: true })\nexport class FullNamePipe implements PipeTransform {\n  transform(user: User): string {\n    return `${user.firstName} ${user.lastName}`;\n  }\n}\n\n@Pipe({ name: 'age', standalone: true, pure: true })\nexport class AgePipe implements PipeTransform {\n  transform(birthDate: Date): number {\n    return new Date().getFullYear() - birthDate.getFullYear();\n  }\n}\n\n@Component({\n  selector: 'app-user-card',\n  template: `\n    <div class=\"user\">\n      <!-- Pipes only run when input changes -->\n      <h2>{{ user | fullName }}</h2>\n      <span>{{ user.birthDate | age }}</span>\n      <p>{{ user.address.street }}, {{ user.address.city }}</p>\n    </div>\n  `,\n  imports: [FullNamePipe, AgePipe],\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserCardComponent {\n  @Input() user!: User;\n}\n\n// Option 2: Computed signal (Angular 16+)\n@Component({\n  selector: 'app-user-card',\n  template: `\n    <div class=\"user\">\n      <h2>{{ fullName() }}</h2>\n      <span>{{ age() }}</span>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class UserCardComponent {\n  user = input.required<User>();\n\n  fullName = computed(() =>\n    `${this.user().firstName} ${this.user().lastName}`\n  );\n\n  age = computed(() =>\n    new Date().getFullYear() - this.user().birthDate.getFullYear()\n  );\n}",
+    "language": "typescript",
+    "description": "Use pipes or computed values"
+  },
+  {
+    "ruleId": "template-virtual-scroll",
+    "ruleTitle": "Use Virtual Scrolling for Large Lists",
+    "type": "bad",
+    "code": "@Component({\n  selector: 'app-product-list',\n  template: `\n    <!-- 10,000 products = 10,000 DOM nodes = slow & memory hungry -->\n    <div class=\"product-list\">\n      @for (product of products; track product.id) {\n        <app-product-card [product]=\"product\" />\n      }\n    </div>\n  `\n})\nexport class ProductListComponent {\n  products: Product[] = []; // 10,000 items loaded\n}",
+    "language": "typescript",
+    "description": "Renders all items"
+  },
+  {
+    "ruleId": "template-virtual-scroll",
+    "ruleTitle": "Use Virtual Scrolling for Large Lists",
+    "type": "good",
+    "code": "import { ScrollingModule } from '@angular/cdk/scrolling';\n\n@Component({\n  selector: 'app-product-list',\n  template: `\n    <!-- Only ~10-20 visible items rendered at a time -->\n    <cdk-virtual-scroll-viewport\n      itemSize=\"80\"\n      class=\"product-list\"\n    >\n      <app-product-card\n        *cdkVirtualFor=\"let product of products; trackBy: trackById\"\n        [product]=\"product\"\n      />\n    </cdk-virtual-scroll-viewport>\n  `,\n  styles: [`\n    .product-list {\n      height: 600px; /* Fixed height required */\n      width: 100%;\n    }\n  `],\n  imports: [ScrollingModule],\n  changeDetection: ChangeDetectionStrategy.OnPush\n})\nexport class ProductListComponent {\n  products: Product[] = []; // 10,000 items - no problem!\n\n  trackById(index: number, product: Product): number {\n    return product.id;\n  }\n}",
+    "language": "typescript",
+    "description": "Virtual scrolling"
+  },
+  {
+    "ruleId": "bundle-defer-third-party",
+    "ruleTitle": "Defer Non-Critical Third-Party Scripts",
+    "type": "bad",
+    "code": "// ❌ Analytics component loads in main bundle\nimport { AnalyticsComponent } from './analytics.component';\nimport { ChatWidgetComponent } from './chat-widget.component';\nimport { ErrorTrackingComponent } from './error-tracking.component';\n\n@Component({\n  selector: 'app-root',\n  template: `\n    <app-header />\n    <router-outlet />\n    <app-footer />\n\n    <!-- These load immediately, blocking TTI -->\n    <app-analytics />\n    <app-chat-widget />\n    <app-error-tracking />\n  `,\n  imports: [\n    AnalyticsComponent,      // Included in main bundle\n    ChatWidgetComponent,     // Included in main bundle\n    ErrorTrackingComponent   // Included in main bundle\n  ]\n})\nexport class AppComponent {}",
+    "language": "typescript",
+    "description": "blocks initial bundle"
+  },
+  {
+    "ruleId": "bundle-defer-third-party",
+    "ruleTitle": "Defer Non-Critical Third-Party Scripts",
+    "type": "good",
+    "code": "@Component({\n  selector: 'app-root',\n  template: `\n    <app-header />\n    <router-outlet />\n    <app-footer />\n\n    <!-- ✅ Loads AFTER hydration completes -->\n    @defer (on idle) {\n      <app-analytics />\n    }\n\n    @defer (on idle) {\n      <app-chat-widget />\n    }\n\n    @defer (on idle) {\n      <app-error-tracking />\n    }\n  `,\n  imports: [HeaderComponent, FooterComponent]\n  // Analytics, ChatWidget, ErrorTracking NOT in imports - loaded dynamically\n})\nexport class AppComponent {}",
+    "language": "typescript",
+    "description": "defer with @defer"
   },
   {
     "ruleId": "bundle-defer",
@@ -363,6 +665,156 @@
     "code": "@Component({...})\nexport class DataComponent {\n  constructor() {\n    // In constructor, DestroyRef is auto-injected\n    this.dataService.getData()\n      .pipe(takeUntilDestroyed())\n      .subscribe(data => this.processData(data));\n  }\n}\n\n// Or outside constructor:\nexport class DataComponent implements OnInit {\n  private destroyRef = inject(DestroyRef);\n\n  ngOnInit() {\n    this.dataService.getData()\n      .pipe(takeUntilDestroyed(this.destroyRef))\n      .subscribe(data => this.processData(data));\n  }\n}",
     "language": "typescript",
     "description": "takeUntilDestroyed handles cleanup"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "bad",
+    "code": "// ❌ Side effects: logging, DOM manipulation, HTTP calls\n@Component({...})\nexport class ProductListComponent {\n  products = signal<Product[]>([]);\n\n  // BAD: Console log runs multiple times unexpectedly\n  totalPrice = computed(() => {\n    console.log('Calculating total...'); // Side effect!\n    return this.products().reduce((sum, p) => sum + p.price, 0);\n  });\n\n  // BAD: Mutating external state\n  processedProducts = computed(() => {\n    this.analyticsService.track('products-viewed'); // Side effect!\n    return this.products().filter(p => p.active);\n  });\n\n  // BAD: Async operations (will NOT work)\n  enrichedProducts = computed(async () => { // DON'T DO THIS\n    const products = this.products();\n    return await this.enrichData(products); // Signals are synchronous!\n  });\n}",
+    "language": "typescript",
+    "description": "Side effects in computed"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "good",
+    "code": "@Component({...})\nexport class ProductListComponent {\n  products = signal<Product[]>([]);\n\n  // ✅ Pure computed - only derives new value\n  totalPrice = computed(() =>\n    this.products().reduce((sum, p) => sum + p.price, 0)\n  );\n\n  // ✅ Pure computed - filter is a pure operation\n  activeProducts = computed(() =>\n    this.products().filter(p => p.active)\n  );\n\n  // ✅ Use effect() for side effects\n  constructor() {\n    effect(() => {\n      const products = this.products();\n      console.log(`Products updated: ${products.length} items`);\n      this.analyticsService.track('products-viewed', { count: products.length });\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Pure computed, effects for side effects"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "bad",
+    "code": "// ❌ Mutating the array directly\n@Component({...})\nexport class TodoComponent {\n  todos = signal<Todo[]>([]);\n\n  sortedTodos = computed(() => {\n    const items = this.todos();\n    items.sort((a, b) => a.priority - b.priority); // Mutates original!\n    return items;\n  });\n}",
+    "language": "typescript",
+    "description": "Mutating signal values"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "good",
+    "code": "// ✅ Create new array, don't mutate\n@Component({...})\nexport class TodoComponent {\n  todos = signal<Todo[]>([]);\n\n  sortedTodos = computed(() =>\n    [...this.todos()].sort((a, b) => a.priority - b.priority)\n    // Or use toSorted() in modern JS\n    // this.todos().toSorted((a, b) => a.priority - b.priority)\n  );\n\n  // ✅ Using spread for objects\n  todosWithStatus = computed(() =>\n    this.todos().map(todo => ({\n      ...todo,\n      statusLabel: todo.done ? 'Complete' : 'Pending'\n    }))\n  );\n}",
+    "language": "typescript",
+    "description": "Immutable operations"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "bad",
+    "code": "// ❌ Heavy computation runs on every access\n@Component({...})\nexport class DataGridComponent {\n  data = signal<Row[]>([]);\n  filter = signal('');\n\n  // Problem: Complex filtering runs every time filteredData() is accessed\n  filteredData = computed(() => {\n    return this.data()\n      .filter(row => this.matchesFilter(row, this.filter()))\n      .sort((a, b) => this.complexSort(a, b))\n      .map(row => this.transformRow(row));\n  });\n}",
+    "language": "typescript",
+    "description": "Expensive operations without memoization"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "good",
+    "code": "// ✅ Chain computed signals - each only recomputes when its deps change\n@Component({...})\nexport class DataGridComponent {\n  data = signal<Row[]>([]);\n  filter = signal('');\n  sortField = signal<keyof Row>('name');\n\n  // Each step is memoized independently\n  filteredData = computed(() =>\n    this.data().filter(row =>\n      row.name.toLowerCase().includes(this.filter().toLowerCase())\n    )\n  );\n\n  sortedData = computed(() =>\n    [...this.filteredData()].sort((a, b) =>\n      String(a[this.sortField()]).localeCompare(String(b[this.sortField()]))\n    )\n  );\n\n  // Only re-transforms when sortedData changes\n  displayData = computed(() =>\n    this.sortedData().map(row => ({\n      ...row,\n      displayName: `${row.firstName} ${row.lastName}`\n    }))\n  );\n}",
+    "language": "typescript",
+    "description": "Break into smaller computed signals"
+  },
+  {
+    "ruleId": "signal-computed-pure",
+    "ruleTitle": "Keep computed() Pure - No Side Effects",
+    "type": "good",
+    "code": "@Component({...})\nexport class ExamplesComponent {\n  user = signal<User | null>(null);\n  items = signal<Item[]>([]);\n  searchTerm = signal('');\n\n  // ✅ Derive boolean state\n  isLoggedIn = computed(() => this.user() !== null);\n\n  // ✅ Derive formatted values\n  displayName = computed(() => {\n    const user = this.user();\n    return user ? `${user.firstName} ${user.lastName}` : 'Guest';\n  });\n\n  // ✅ Filter/map operations\n  visibleItems = computed(() =>\n    this.items().filter(item =>\n      item.name.toLowerCase().includes(this.searchTerm().toLowerCase())\n    )\n  );\n\n  // ✅ Aggregate calculations\n  stats = computed(() => ({\n    total: this.items().length,\n    visible: this.visibleItems().length,\n    avgPrice: this.items().reduce((s, i) => s + i.price, 0) / this.items().length || 0\n  }));\n\n  // ✅ Combine multiple signals\n  viewModel = computed(() => ({\n    user: this.user(),\n    items: this.visibleItems(),\n    stats: this.stats(),\n    isLoggedIn: this.isLoggedIn()\n  }));\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "bad",
+    "code": "// ❌ INFINITE LOOP - effect reads count, then writes to count\n@Component({...})\nexport class CounterComponent {\n  count = signal(0);\n\n  constructor() {\n    effect(() => {\n      // Reads count, triggers effect\n      // Writes count, triggers effect again\n      // Infinite loop!\n      this.count.set(this.count() + 1);\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Writing to a signal you're reading"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "good",
+    "code": "// ✅ Use computed for derived values\n@Component({...})\nexport class CounterComponent {\n  count = signal(0);\n  doubledCount = computed(() => this.count() * 2); // No effect needed!\n\n  increment() {\n    this.count.update(c => c + 1);\n  }\n}",
+    "language": "typescript",
+    "description": "Use computed or direct update"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "bad",
+    "code": "// ❌ Memory leak - inner effect never destroyed\n@Component({...})\nexport class BadComponent {\n  user = signal<User | null>(null);\n\n  constructor() {\n    effect(() => {\n      const user = this.user();\n      if (user) {\n        // Creates new effect on EVERY user change\n        // Old effects never cleaned up!\n        effect(() => {\n          console.log('Nested effect:', user.name);\n        });\n      }\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Nested effects"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "good",
+    "code": "// ✅ One effect, conditional inside\n@Component({...})\nexport class GoodComponent {\n  user = signal<User | null>(null);\n\n  constructor() {\n    effect(() => {\n      const user = this.user();\n      if (user) {\n        console.log('User logged in:', user.name);\n        this.analyticsService.identify(user.id);\n      } else {\n        console.log('User logged out');\n        this.analyticsService.reset();\n      }\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Single effect with conditional logic"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "bad",
+    "code": "// ❌ Anti-pattern: effect to derive state\n@Component({...})\nexport class BadSyncComponent {\n  firstName = signal('');\n  lastName = signal('');\n  fullName = signal(''); // Should be computed!\n\n  constructor() {\n    // DON'T: Use effect to sync signals\n    effect(() => {\n      this.fullName.set(`${this.firstName()} ${this.lastName()}`);\n    }, { allowSignalWrites: true });\n  }\n}",
+    "language": "typescript",
+    "description": "Using effect to sync state"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "good",
+    "code": "// ✅ computed is the right tool for derived values\n@Component({...})\nexport class GoodSyncComponent {\n  firstName = signal('');\n  lastName = signal('');\n  fullName = computed(() => `${this.firstName()} ${this.lastName()}`);\n}",
+    "language": "typescript",
+    "description": "Use computed for derived state"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "bad",
+    "code": "// ❌ Anti-pattern: calling child methods from parent effect\n@Component({\n  template: `<app-child #child />`\n})\nexport class BadParentComponent {\n  data = signal<Data | null>(null);\n  @ViewChild('child') child!: ChildComponent;\n\n  constructor() {\n    effect(() => {\n      const data = this.data();\n      if (data) {\n        this.child.updateData(data); // Imperative, fragile\n      }\n    });\n  }\n}",
+    "language": "typescript",
+    "description": "Effect for parent-to-child communication"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "good",
+    "code": "// ✅ Declarative data flow with inputs\n@Component({\n  template: `<app-child [data]=\"data()\" />`\n})\nexport class GoodParentComponent {\n  data = signal<Data | null>(null);\n}\n\n// Child receives data reactively via input\n@Component({...})\nexport class ChildComponent {\n  data = input<Data | null>(null);\n\n  processedData = computed(() => {\n    const d = this.data();\n    return d ? this.process(d) : null;\n  });\n}",
+    "language": "typescript",
+    "description": "Use input binding"
+  },
+  {
+    "ruleId": "signal-effect-patterns",
+    "ruleTitle": "Use effect() Correctly - Avoid Anti-Patterns",
+    "type": "good",
+    "code": "@Component({...})\nexport class CorrectEffectUsageComponent {\n  theme = signal<'light' | 'dark'>('light');\n  searchQuery = signal('');\n  user = signal<User | null>(null);\n\n  constructor() {\n    // ✅ Sync with external API (DOM, localStorage, etc.)\n    effect(() => {\n      document.body.classList.toggle('dark-mode', this.theme() === 'dark');\n    });\n\n    // ✅ Persist to localStorage\n    effect(() => {\n      localStorage.setItem('theme', this.theme());\n    });\n\n    // ✅ Logging/Analytics (non-reactive world)\n    effect(() => {\n      const user = this.user();\n      if (user) {\n        this.analytics.identify(user.id);\n      }\n    });\n\n    // ✅ Trigger imperative APIs\n    effect(() => {\n      const query = this.searchQuery();\n      if (query.length > 0) {\n        this.autocomplete.updateSuggestions(query);\n      }\n    });\n  }\n}",
+    "language": "typescript"
+  },
+  {
+    "ruleId": "signal-linkedsignal",
+    "ruleTitle": "Use linkedSignal for Derived + Writable State",
+    "type": "good",
+    "code": "// ✅ Advanced: Keep selection if it's still in the new list\n@Component({...})\nexport class SmartSelectorComponent {\n  options = signal<Option[]>([]);\n\n  selectedOption = linkedSignal({\n    source: this.options,\n    computation: (options, previous) => {\n      // If previous selection is still valid, keep it\n      if (previous && options.some(o => o.id === previous.id)) {\n        return previous;\n      }\n      // Otherwise, select first option\n      return options[0] ?? null;\n    }\n  });\n}",
+    "language": "typescript",
+    "description": "linkedSignal"
+  },
+  {
+    "ruleId": "signal-linkedsignal",
+    "ruleTitle": "Use linkedSignal for Derived + Writable State",
+    "type": "bad",
+    "code": "// ❌ Anti-pattern: effect to sync derived state\n@Component({...})\nexport class BadComponent {\n  source = signal<string[]>([]);\n  selected = signal<string | null>(null);\n\n  constructor() {\n    effect(() => {\n      const items = this.source();\n      this.selected.set(items[0] ?? null);\n    }, { allowSignalWrites: true }); // Avoid this!\n  }\n}",
+    "language": "typescript",
+    "description": "effect with allowSignalWrites"
+  },
+  {
+    "ruleId": "signal-linkedsignal",
+    "ruleTitle": "Use linkedSignal for Derived + Writable State",
+    "type": "good",
+    "code": "// ✅ linkedSignal is designed for this exact use case\n@Component({...})\nexport class GoodComponent {\n  source = signal<string[]>([]);\n  selected = linkedSignal(() => this.source()[0] ?? null);\n}",
+    "language": "typescript",
+    "description": "linkedSignal"
   },
   {
     "ruleId": "ssr-hydration",

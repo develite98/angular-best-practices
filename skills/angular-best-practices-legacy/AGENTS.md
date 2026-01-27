@@ -18,25 +18,35 @@ Performance optimization guide for Angular 12-16 applications using NgModule-bas
 
 ## Table of Contents
 
+0. [Section 0](#0-section-0) — **MEDIUM**
+   - 0.1 [Combine Multiple Array Iterations](#01-combine-multiple-array-iterations)
+   - 0.2 [Use CSS content-visibility for Off-Screen Content](#02-use-css-content-visibility-for-off-screen-content)
+   - 0.3 [Use Set/Map for O(1) Lookups](#03-use-setmap-for-o1-lookups)
+   - 0.4 [Use Smart and Dumb Component Pattern](#04-use-smart-and-dumb-component-pattern)
 1. [Change Detection](#1-change-detection) — **CRITICAL**
    - 1.1 [Detach Change Detector for Heavy Operations](#11-detach-change-detector-for-heavy-operations)
    - 1.2 [Run Non-UI Code Outside NgZone](#12-run-non-ui-code-outside-ngzone)
    - 1.3 [Use BehaviorSubject for Reactive State](#13-use-behaviorsubject-for-reactive-state)
    - 1.4 [Use OnPush Change Detection Strategy](#14-use-onpush-change-detection-strategy)
 2. [Bundle & Lazy Loading](#2-bundle--lazy-loading) — **CRITICAL**
-   - 2.1 [Lazy Load Feature Modules](#21-lazy-load-feature-modules)
-   - 2.2 [Organize Code with Feature Modules](#22-organize-code-with-feature-modules)
-   - 2.3 [Use Preload Strategies for Lazy Modules](#23-use-preload-strategies-for-lazy-modules)
-   - 2.4 [Use SCAM Pattern Instead of Shared Modules](#24-use-scam-pattern-instead-of-shared-modules)
+   - 2.1 [Avoid Barrel File Imports](#21-avoid-barrel-file-imports)
+   - 2.2 [Lazy Load Feature Modules](#22-lazy-load-feature-modules)
+   - 2.3 [Organize Code with Feature Modules](#23-organize-code-with-feature-modules)
+   - 2.4 [Use Preload Strategies for Lazy Modules](#24-use-preload-strategies-for-lazy-modules)
+   - 2.5 [Use SCAM Pattern Instead of Shared Modules](#25-use-scam-pattern-instead-of-shared-modules)
 3. [RxJS Optimization](#3-rxjs-optimization) — **HIGH**
-   - 3.1 [Share Observables to Avoid Duplicate Requests](#31-share-observables-to-avoid-duplicate-requests)
-   - 3.2 [Use Async Pipe Instead of Manual Subscribe](#32-use-async-pipe-instead-of-manual-subscribe)
-   - 3.3 [Use Efficient RxJS Operators](#33-use-efficient-rxjs-operators)
-   - 3.4 [Use Subject with takeUntil for Cleanup](#34-use-subject-with-takeuntil-for-cleanup)
+   - 3.1 [Avoid Nested Subscriptions](#31-avoid-nested-subscriptions)
+   - 3.2 [Share Observables to Avoid Duplicate Requests](#32-share-observables-to-avoid-duplicate-requests)
+   - 3.3 [Use Async Pipe Instead of Manual Subscribe](#33-use-async-pipe-instead-of-manual-subscribe)
+   - 3.4 [Use Correct RxJS Mapping Operators](#34-use-correct-rxjs-mapping-operators)
+   - 3.5 [Use Efficient RxJS Operators](#35-use-efficient-rxjs-operators)
+   - 3.6 [Use Subject with takeUntil for Cleanup](#36-use-subject-with-takeuntil-for-cleanup)
 4. [Template Performance](#4-template-performance) — **HIGH**
-   - 4.1 [Use NgOptimizedImage for Images (v15+)](#41-use-ngoptimizedimage-for-images-v15)
-   - 4.2 [Use Pure Pipes for Data Transformation](#42-use-pure-pipes-for-data-transformation)
-   - 4.3 [Use trackBy with *ngFor](#43-use-trackby-with-ngfor)
+   - 4.1 [Avoid Function Calls in Templates](#41-avoid-function-calls-in-templates)
+   - 4.2 [Use NgOptimizedImage for Images (v15+)](#42-use-ngoptimizedimage-for-images-v15)
+   - 4.3 [Use Pure Pipes for Data Transformation](#43-use-pure-pipes-for-data-transformation)
+   - 4.4 [Use trackBy with *ngFor](#44-use-trackby-with-ngfor)
+   - 4.5 [Use Virtual Scrolling for Large Lists](#45-use-virtual-scrolling-for-large-lists)
 5. [Dependency Injection](#5-dependency-injection) — **MEDIUM-HIGH**
    - 5.1 [Use Factory Providers for Complex Setup](#51-use-factory-providers-for-complex-setup)
    - 5.2 [Use InjectionToken for Type-Safe Configuration](#52-use-injectiontoken-for-type-safe-configuration)
@@ -49,6 +59,711 @@ Performance optimization guide for Angular 12-16 applications using NgModule-bas
    - 7.2 [Use Typed Reactive Forms (v14+)](#72-use-typed-reactive-forms-v14)
 8. [General Performance](#8-general-performance) — **LOW-MEDIUM**
    - 8.1 [Offload Heavy Computation to Web Workers](#81-offload-heavy-computation-to-web-workers)
+   - 8.2 [Prevent Memory Leaks](#82-prevent-memory-leaks)
+
+---
+
+## 0. Section 0
+
+**Impact: MEDIUM**
+
+### 0.1 Combine Multiple Array Iterations
+
+**Impact: LOW-MEDIUM (Reduces array iterations from N to 1)**
+
+Multiple `.filter()`, `.map()`, or `.reduce()` calls iterate the array multiple times. When processing the same array for different purposes, combine into a single loop.
+
+**Incorrect (3 iterations over same array):**
+
+```typescript
+@Component({...})
+export class UserStatsComponent {
+  users: User[] = [];
+
+  getStats() {
+    // ❌ Iterates users array 3 times
+    const admins = this.users.filter(u => u.role === 'admin');
+    const activeUsers = this.users.filter(u => u.isActive);
+    const totalAge = this.users.reduce((sum, u) => sum + u.age, 0);
+
+    return { admins, activeUsers, averageAge: totalAge / this.users.length };
+  }
+}
+```
+
+**Correct (1 iteration):**
+
+```typescript
+@Component({...})
+export class UserStatsComponent {
+  users: User[] = [];
+
+  getStats() {
+    // ✅ Single iteration, multiple results
+    const admins: User[] = [];
+    const activeUsers: User[] = [];
+    let totalAge = 0;
+
+    for (const user of this.users) {
+      if (user.role === 'admin') admins.push(user);
+      if (user.isActive) activeUsers.push(user);
+      totalAge += user.age;
+    }
+
+    return { admins, activeUsers, averageAge: totalAge / this.users.length };
+  }
+}
+```
+
+**With reduce for complex aggregations:**
+
+```typescript
+// ❌ Bad - 4 iterations
+const total = orders.reduce((sum, o) => sum + o.total, 0);
+const count = orders.length;
+const pending = orders.filter(o => o.status === 'pending').length;
+const shipped = orders.filter(o => o.status === 'shipped').length;
+
+// ✅ Good - 1 iteration with reduce
+const stats = orders.reduce(
+  (acc, order) => ({
+    total: acc.total + order.total,
+    count: acc.count + 1,
+    pending: acc.pending + (order.status === 'pending' ? 1 : 0),
+    shipped: acc.shipped + (order.status === 'shipped' ? 1 : 0)
+  }),
+  { total: 0, count: 0, pending: 0, shipped: 0 }
+);
+```
+
+**Map and filter in one pass:**
+
+```typescript
+// ❌ Bad - 2 iterations
+const activeUserNames = users
+  .filter(u => u.isActive)
+  .map(u => u.name);
+
+// ✅ Good - 1 iteration with flatMap or reduce
+const activeUserNames = users.flatMap(u =>
+  u.isActive ? [u.name] : []
+);
+
+// Or with reduce
+const activeUserNames = users.reduce<string[]>(
+  (names, u) => u.isActive ? [...names, u.name] : names,
+  []
+);
+
+// Or simple loop (fastest)
+const activeUserNames: string[] = [];
+for (const u of users) {
+  if (u.isActive) activeUserNames.push(u.name);
+}
+```
+
+**Grouping data:**
+
+```typescript
+// ❌ Bad - multiple filter calls for each group
+const byStatus = {
+  pending: orders.filter(o => o.status === 'pending'),
+  processing: orders.filter(o => o.status === 'processing'),
+  shipped: orders.filter(o => o.status === 'shipped'),
+  delivered: orders.filter(o => o.status === 'delivered')
+};
+
+// ✅ Good - single iteration grouping
+const byStatus = orders.reduce<Record<string, Order[]>>(
+  (groups, order) => {
+    const status = order.status;
+    groups[status] = groups[status] || [];
+    groups[status].push(order);
+    return groups;
+  },
+  {}
+);
+
+// ✅ Even better with Object.groupBy (ES2024)
+const byStatus = Object.groupBy(orders, order => order.status);
+```
+
+**In computed signals:**
+
+```typescript
+@Component({...})
+export class OrderDashboardComponent {
+  orders = input.required<Order[]>();
+
+  // ❌ Bad - 3 computed = 3 iterations when orders change
+  pendingOrders = computed(() =>
+    this.orders().filter(o => o.status === 'pending')
+  );
+  totalRevenue = computed(() =>
+    this.orders().reduce((sum, o) => sum + o.total, 0)
+  );
+  orderCount = computed(() => this.orders().length);
+
+  // ✅ Good - 1 computed = 1 iteration
+  stats = computed(() => {
+    const orders = this.orders();
+    const pending: Order[] = [];
+    let revenue = 0;
+
+    for (const order of orders) {
+      if (order.status === 'pending') pending.push(order);
+      revenue += order.total;
+    }
+
+    return {
+      pending,
+      revenue,
+      count: orders.length
+    };
+  });
+}
+```
+
+**When multiple iterations ARE okay:**
+
+```typescript
+// ✅ OK - small arrays (under 100 items)
+const filtered = smallArray.filter(x => x.active).map(x => x.name);
+
+// ✅ OK - readability matters more than micro-optimization
+// When array is small and code is read often
+const adults = users.filter(u => u.age >= 18);
+const adultNames = adults.map(u => u.name);
+```
+
+**Why it matters:**
+
+- 10,000 items × 3 iterations = 30,000 operations
+
+- 10,000 items × 1 iteration = 10,000 operations (3× fewer)
+
+- Each iteration has function call overhead
+
+- Matters most for large datasets or frequent recalculations
+
+Reference: [https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array)
+
+### 0.2 Use CSS content-visibility for Off-Screen Content
+
+**Impact: HIGH (10× faster initial render by skipping off-screen layout)**
+
+Apply `content-visibility: auto` to defer rendering of off-screen content. The browser skips layout and paint for elements not in the viewport, dramatically improving initial render time.
+
+**Incorrect (renders all items immediately):**
+
+```typescript
+@Component({
+  selector: 'app-message-list',
+  template: `
+    <div class="messages">
+      <!-- All 1000 messages rendered and laid out immediately -->
+      @for (message of messages; track message.id) {
+        <div class="message">
+          <app-avatar [user]="message.author" />
+          <div class="content">{{ message.text }}</div>
+          <span class="time">{{ message.time | date:'short' }}</span>
+        </div>
+      }
+    </div>
+  `,
+  styles: [`
+    .message {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+    }
+  `]
+})
+export class MessageListComponent {
+  messages: Message[] = []; // 1000+ messages
+}
+```
+
+**Correct (defers off-screen rendering):**
+
+```typescript
+@Component({
+  selector: 'app-message-list',
+  template: `
+    <div class="messages">
+      @for (message of messages; track message.id) {
+        <div class="message">
+          <app-avatar [user]="message.author" />
+          <div class="content">{{ message.text }}</div>
+          <span class="time">{{ message.time | date:'short' }}</span>
+        </div>
+      }
+    </div>
+  `,
+  styles: [`
+    .message {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+
+      /* ✅ Skip layout/paint for off-screen items */
+      content-visibility: auto;
+
+      /* Hint at size to prevent layout shift when scrolling */
+      contain-intrinsic-size: 0 80px;
+    }
+  `]
+})
+export class MessageListComponent {
+  messages: Message[] = []; // 1000+ messages - no problem!
+}
+```
+
+**For card layouts:**
+
+```scss
+// Product grid with many items
+.product-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 400px; // width height
+
+  // Also add containment for extra performance
+  contain: layout style paint;
+}
+```
+
+**For sections/pages:**
+
+```typescript
+@Component({
+  selector: 'app-long-page',
+  template: `
+    <section class="hero">...</section>
+    <section class="features content-section">...</section>
+    <section class="testimonials content-section">...</section>
+    <section class="pricing content-section">...</section>
+    <section class="faq content-section">...</section>
+    <section class="footer content-section">...</section>
+  `,
+  styles: [`
+    .content-section {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 500px; /* Estimated section height */
+    }
+  `]
+})
+export class LongPageComponent {}
+```
+
+**Dynamic height estimation:**
+
+```typescript
+@Component({
+  selector: 'app-dynamic-list',
+  template: `
+    @for (item of items; track item.id) {
+      <div
+        class="item"
+        [style.contain-intrinsic-size]="'0 ' + estimateHeight(item) + 'px'"
+      >
+        {{ item.content }}
+      </div>
+    }
+  `,
+  styles: [`
+    .item {
+      content-visibility: auto;
+    }
+  `]
+})
+export class DynamicListComponent {
+  estimateHeight(item: Item): number {
+    // Rough estimation based on content length
+    const baseHeight = 60;
+    const charsPerLine = 50;
+    const lineHeight = 20;
+    const lines = Math.ceil(item.content.length / charsPerLine);
+    return baseHeight + (lines * lineHeight);
+  }
+}
+```
+
+**Combining with virtual scroll:**
+
+```typescript
+// For extremely long lists (10,000+ items), combine both:
+// - Virtual scroll: only creates DOM nodes for visible items
+// - content-visibility: optimizes the rendered items
+
+@Component({
+  template: `
+    <cdk-virtual-scroll-viewport itemSize="80" class="list">
+      <div
+        *cdkVirtualFor="let item of items"
+        class="item"
+      >
+        {{ item.name }}
+      </div>
+    </cdk-virtual-scroll-viewport>
+  `,
+  styles: [`
+    .item {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 80px;
+    }
+  `]
+})
+export class HugeListComponent {}
+```
+
+**When to use content-visibility:**
+
+| Scenario | Recommendation |
+
+|----------|----------------|
+
+| List with 50-500 items | ✅ `content-visibility: auto` |
+
+| List with 500+ items | ✅ Virtual scroll + content-visibility |
+
+| Long scrolling page | ✅ On each section |
+
+| Modal/dialog content | ❌ Usually all visible |
+
+| Above-the-fold content | ❌ Must render immediately |
+
+**Browser support note:**
+
+```scss
+// Progressive enhancement - works in Chrome, Edge, Opera
+// Safari/Firefox ignore it safely
+.item {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 80px;
+
+  // Fallback for unsupported browsers (optional)
+  @supports not (content-visibility: auto) {
+    // No special handling needed - just renders normally
+  }
+}
+```
+
+**Why it matters:**
+
+- 1000 items without content-visibility: browser computes layout for all 1000
+
+- 1000 items with content-visibility: browser computes layout for ~10 visible
+
+- Real-world impact: 10× faster initial paint for long lists
+
+- No JavaScript required - pure CSS optimization
+
+Reference: [https://developer.mozilla.org/en-US/docs/Web/CSS/content-visibility](https://developer.mozilla.org/en-US/docs/Web/CSS/content-visibility)
+
+### 0.3 Use Set/Map for O(1) Lookups
+
+**Impact: LOW-MEDIUM (O(n) to O(1) lookup performance)**
+
+Convert arrays to Set/Map when performing repeated membership checks or key lookups. Array methods like `includes()`, `find()`, and `indexOf()` are O(n), while Set/Map operations are O(1).
+
+**Incorrect (O(n) per lookup):**
+
+```typescript
+@Component({...})
+export class UserListComponent {
+  users: User[] = [];
+  selectedIds: string[] = [];
+
+  isSelected(userId: string): boolean {
+    // ❌ O(n) - scans entire array for each check
+    return this.selectedIds.includes(userId);
+  }
+
+  // With 1000 users and 100 selected, this is 100,000 comparisons
+  // Called on every change detection cycle!
+}
+```
+
+**Correct (O(1) per lookup):**
+
+```typescript
+@Component({...})
+export class UserListComponent {
+  users: User[] = [];
+  selectedIds = new Set<string>();
+
+  isSelected(userId: string): boolean {
+    // ✅ O(1) - instant hash lookup
+    return this.selectedIds.has(userId);
+  }
+
+  toggleSelection(userId: string) {
+    if (this.selectedIds.has(userId)) {
+      this.selectedIds.delete(userId);
+    } else {
+      this.selectedIds.add(userId);
+    }
+  }
+}
+```
+
+**Filtering with Set:**
+
+```typescript
+// ❌ Bad - O(n×m) where n=items, m=allowedIds
+const allowedIds = ['a', 'b', 'c', 'd', 'e'];
+const filtered = items.filter(item => allowedIds.includes(item.id));
+
+// ✅ Good - O(n) where n=items
+const allowedIds = new Set(['a', 'b', 'c', 'd', 'e']);
+const filtered = items.filter(item => allowedIds.has(item.id));
+```
+
+**Map for key-value lookups:**
+
+```typescript
+// ❌ Bad - O(n) find for each lookup
+interface User { id: string; name: string; }
+const users: User[] = [...];
+
+function getUserName(id: string): string {
+  const user = users.find(u => u.id === id); // O(n)
+  return user?.name ?? 'Unknown';
+}
+
+// ✅ Good - O(1) Map lookup
+const userMap = new Map(users.map(u => [u.id, u]));
+
+function getUserName(id: string): string {
+  return userMap.get(id)?.name ?? 'Unknown'; // O(1)
+}
+```
+
+**Building lookup maps in services:**
+
+```typescript
+@Injectable({ providedIn: 'root' })
+export class ProductService {
+  private productsMap = new Map<string, Product>();
+
+  loadProducts(): Observable<Product[]> {
+    return this.http.get<Product[]>('/api/products').pipe(
+      tap(products => {
+        // Build map for O(1) lookups
+        this.productsMap = new Map(products.map(p => [p.id, p]));
+      })
+    );
+  }
+
+  getProductById(id: string): Product | undefined {
+    return this.productsMap.get(id); // O(1) instead of array.find()
+  }
+
+  getProductsByIds(ids: string[]): Product[] {
+    return ids
+      .map(id => this.productsMap.get(id))
+      .filter((p): p is Product => p !== undefined);
+  }
+}
+```
+
+**Deduplication:**
+
+```typescript
+// ❌ Bad - O(n²) with indexOf
+const unique = items.filter((item, index) =>
+  items.indexOf(item) === index
+);
+
+// ✅ Good - O(n) with Set
+const unique = [...new Set(items)];
+
+// For objects, dedupe by key
+const uniqueById = [...new Map(items.map(i => [i.id, i])).values()];
+```
+
+**When to use which:**
+
+| Data Structure | Use Case |
+
+|----------------|----------|
+
+| `Set` | Unique values, membership checks |
+
+| `Map` | Key-value pairs, lookups by ID |
+
+| `Array` | Ordered data, iteration, small collections (<100 items) |
+
+**Performance comparison:**
+
+```typescript
+Array.includes() on 10,000 items: ~0.5ms per lookup
+Set.has() on 10,000 items: ~0.001ms per lookup (500× faster)
+```
+
+**Why it matters:**
+
+- Change detection may call methods many times per second
+
+- With large datasets, O(n) lookups become noticeable bottlenecks
+
+- Set/Map use hash tables for constant-time operations
+
+Reference: [https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set)
+
+### 0.4 Use Smart and Dumb Component Pattern
+
+**Impact: MEDIUM (Separation of concerns improves testability, reusability, and maintainability)**
+
+Separate components into "Smart" (container) components that handle logic/data and "Dumb" (presentational) components that only render UI. This improves testability, reusability, and makes change detection more efficient.
+
+**Incorrect (God component doing everything):**
+
+```typescript
+// ❌ One component handles data, logic, AND presentation
+@Component({
+  selector: 'app-user-dashboard',
+  template: `
+    <div class="dashboard">
+      <h1>Welcome, {{ user?.name }}</h1>
+      @if (loading) {
+        <div class="spinner">Loading...</div>
+      }
+      @for (order of orders; track order.id) {
+        <div class="order-card" [class.urgent]="isUrgent(order)">
+          <h3>Order #{{ order.id }}</h3>
+          <p>{{ order.date | date }}</p>
+          <p>{{ formatPrice(order.total) }}</p>
+          <button (click)="cancelOrder(order)">Cancel</button>
+          <button (click)="viewDetails(order)">Details</button>
+        </div>
+      }
+      <form [formGroup]="filterForm" (ngSubmit)="applyFilters()">
+        <!-- complex filter form -->
+      </form>
+    </div>
+  `
+})
+export class UserDashboardComponent implements OnInit {
+  user: User | null = null;
+  orders: Order[] = [];
+  loading = true;
+  filterForm: FormGroup;
+
+  constructor(
+    private userService: UserService,
+    private orderService: OrderService,
+    private router: Router,
+    private fb: FormBuilder,
+    private analytics: AnalyticsService
+  ) {
+    this.filterForm = this.fb.group({...});
+  }
+
+  ngOnInit() {
+    this.loadUser();
+    this.loadOrders();
+  }
+
+  loadUser() { /* ... */ }
+  loadOrders() { /* ... */ }
+  isUrgent(order: Order): boolean { /* ... */ }
+  formatPrice(price: number): string { /* ... */ }
+  cancelOrder(order: Order) { /* ... */ }
+  viewDetails(order: Order) { /* ... */ }
+  applyFilters() { /* ... */ }
+  // 500+ lines of mixed concerns
+}
+```
+
+**Correct (Smart + Dumb separation):**
+
+```typescript
+// ✅ DUMB Component - single order card
+@Component({
+  selector: 'app-order-card',
+  template: `
+    <div class="order-card" [class.urgent]="isUrgent()">
+      <h3>Order #{{ order().id }}</h3>
+      <p>{{ order().date | date }}</p>
+      <p>{{ order().total | currency }}</p>
+      <button (click)="cancel.emit()">Cancel</button>
+      <button (click)="viewDetails.emit()">Details</button>
+    </div>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class OrderCardComponent {
+  order = input.required<Order>();
+
+  cancel = output<void>();
+  viewDetails = output<void>();
+
+  // Pure computation, no side effects
+  isUrgent = computed(() => {
+    const daysOld = this.getDaysOld(this.order().date);
+    return this.order().status === 'pending' && daysOld > 3;
+  });
+
+  private getDaysOld(date: Date): number {
+    return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  }
+}
+```
+
+---
+
+**Characteristics:**
+
+| Aspect | Smart (Container) | Dumb (Presentational) |
+
+|--------|-------------------|----------------------|
+
+| Services | Injects services | No services |
+
+| State | Manages state | Receives via @Input |
+
+| Side effects | Makes HTTP calls, navigates | Emits events via @Output |
+
+| Reusability | App-specific | Highly reusable |
+
+| Testing | Integration tests | Unit tests (easy) |
+
+| Change Detection | May use Default | Always use OnPush |
+
+---
+
+**File structure recommendation:**
+
+```typescript
+features/
+└── orders/
+    ├── containers/                  # Smart components
+    │   └── order-dashboard/
+    │       └── order-dashboard.component.ts
+    ├── components/                  # Dumb components
+    │   ├── order-list/
+    │   │   └── order-list.component.ts
+    │   ├── order-card/
+    │   │   └── order-card.component.ts
+    │   └── order-filters/
+    │       └── order-filters.component.ts
+    ├── services/
+    │   └── order.service.ts
+    └── orders.routes.ts
+```
+
+**Why it matters:**
+
+- Dumb components are easy to unit test (no mocking services)
+
+- Dumb components are reusable across features
+
+- OnPush works perfectly with input-only components
+
+- Clear data flow makes debugging easier
+
+- Smart components are easier to integration test
+
+Reference: [https://angular.dev/guide/components](https://angular.dev/guide/components)
 
 ---
 
@@ -354,7 +1069,109 @@ Reference: [https://angular.dev/best-practices/skipping-subtrees](https://angula
 
 NgModule-based lazy loading and preload strategies to reduce initial bundle size.
 
-### 2.1 Lazy Load Feature Modules
+### 2.1 Avoid Barrel File Imports
+
+**Impact: HIGH (Direct imports enable tree-shaking, reducing bundle size up to 30%)**
+
+Barrel files (index.ts) re-export multiple modules from a single entry point. While convenient, they prevent effective tree-shaking and increase bundle size significantly.
+
+**Incorrect (Barrel imports):**
+
+```typescript
+// Even worse - wildcard imports
+import * as Services from './services';
+
+// Using only one service, but entire barrel is included
+constructor(private userService: Services.UserService) {}
+```
+
+**Correct (Direct imports):**
+
+```typescript
+// For commonly used utilities, create small focused barrels
+// utils/date/index.ts - small, focused barrel (OK)
+export { formatDate } from './format-date';
+export { parseDate } from './parse-date';
+
+// utils/string/index.ts - separate barrel for strings
+export { capitalize } from './capitalize';
+export { truncate } from './truncate';
+
+// Instead of one massive utils/index.ts
+```
+
+**Correct (Package exports for libraries):**
+
+```typescript
+// Consumer code - tree-shakeable imports
+import { Button } from '@myorg/ui-components/button';
+// Only button code is bundled
+```
+
+**Project structure recommendation:**
+
+```typescript
+// ❌ Avoid: One massive barrel
+src/
+├── services/
+│   ├── index.ts         // exports 30 services
+│   ├── user.service.ts
+│   └── ...
+
+// ✅ Better: No barrels, direct imports
+src/
+├── services/
+│   ├── user.service.ts      // import directly
+│   ├── auth.service.ts      // import directly
+│   └── ...
+
+// ✅ Also OK: Feature-based small barrels
+src/
+├── features/
+│   ├── user/
+│   │   ├── index.ts         // only user-related exports
+│   │   ├── user.service.ts
+│   │   └── user.component.ts
+│   └── auth/
+│       ├── index.ts         // only auth-related exports
+│       └── auth.service.ts
+```
+
+**IDE tip - auto-imports:**
+
+```json
+// .vscode/settings.json
+{
+  "typescript.preferences.importModuleSpecifier": "relative",
+  // Prevents IDE from auto-importing from barrels
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    "**/index.ts",
+    "**/index"
+  ]
+}
+```
+
+**Why it matters:**
+
+- Barrel files create complex dependency graphs that confuse bundlers
+
+- `export *` syntax is especially problematic for tree-shaking
+
+- Real-world impact: 30% bundle size reduction by switching to direct imports
+
+- Build times also improve (15-70% faster) with simpler module graphs
+
+**Exceptions where barrels are OK:**
+
+- Published npm packages with explicit `exports` in package.json
+
+- Small, cohesive feature modules (under 5 exports)
+
+- Public API boundaries that rarely change
+
+Reference: [https://webpack.js.org/guides/tree-shaking/](https://webpack.js.org/guides/tree-shaking/)
+
+### 2.2 Lazy Load Feature Modules
 
 **Impact: CRITICAL (40-70% initial bundle reduction)**
 
@@ -412,7 +1229,7 @@ export class AppRoutingModule {}
 
 Reference: [https://v16.angular.io/guide/lazy-loading-ngmodules](https://v16.angular.io/guide/lazy-loading-ngmodules)
 
-### 2.2 Organize Code with Feature Modules
+### 2.3 Organize Code with Feature Modules
 
 **Impact: CRITICAL (Better code organization, enables lazy loading)**
 
@@ -521,7 +1338,7 @@ export class SharedModule {}
 
 Reference: [https://v16.angular.io/guide/feature-modules](https://v16.angular.io/guide/feature-modules)
 
-### 2.3 Use Preload Strategies for Lazy Modules
+### 2.4 Use Preload Strategies for Lazy Modules
 
 **Impact: CRITICAL (Improves navigation performance)**
 
@@ -564,7 +1381,7 @@ export class AppRoutingModule {}
 
 Reference: [https://v16.angular.io/guide/lazy-loading-ngmodules#preloading](https://v16.angular.io/guide/lazy-loading-ngmodules#preloading)
 
-### 2.4 Use SCAM Pattern Instead of Shared Modules
+### 2.5 Use SCAM Pattern Instead of Shared Modules
 
 **Impact: HIGH (Better tree-shaking and smaller bundles by avoiding shared module bloat)**
 
@@ -698,7 +1515,208 @@ Reference: [https://v16.angular.io/guide/ngmodule-faq](https://v16.angular.io/gu
 
 Proper RxJS patterns with async pipe, Subject-based cleanup, and efficient operators.
 
-### 3.1 Share Observables to Avoid Duplicate Requests
+### 3.1 Avoid Nested Subscriptions
+
+**Impact: HIGH (Nested subscribes cause memory leaks, callback hell, and missed errors)**
+
+Nesting subscribe() calls inside other subscribe() callbacks creates callback hell, memory leaks, and makes error handling difficult. Use RxJS operators to compose streams instead.
+
+**Incorrect (Nested subscriptions):**
+
+```typescript
+// ❌ Callback hell, inner subscription never cleaned up
+@Component({...})
+export class OrderDetailsComponent implements OnInit {
+  ngOnInit() {
+    this.route.params.subscribe(params => {
+      this.orderService.getOrder(params['id']).subscribe(order => {
+        this.order = order;
+        this.userService.getUser(order.userId).subscribe(user => {
+          this.user = user;
+          this.addressService.getAddress(user.addressId).subscribe(address => {
+            this.address = address;
+            // 4 levels deep, impossible to maintain
+            // Memory leak: inner subscriptions never unsubscribed
+          });
+        });
+      });
+    });
+  }
+}
+```
+
+**Correct (Use operators to compose):**
+
+```typescript
+// ✅ Flat, readable, properly managed
+@Component({...})
+export class OrderDetailsComponent implements OnDestroy {
+  private destroy$ = new Subject<void>();
+
+  order$ = this.route.params.pipe(
+    map(params => params['id']),
+    switchMap(id => this.orderService.getOrder(id)),
+    takeUntil(this.destroy$)
+  );
+
+  user$ = this.order$.pipe(
+    switchMap(order => this.userService.getUser(order.userId))
+  );
+
+  address$ = this.user$.pipe(
+    switchMap(user => this.addressService.getAddress(user.addressId))
+  );
+
+  // Or combine all data into one stream
+  vm$ = this.route.params.pipe(
+    map(params => params['id']),
+    switchMap(id => this.orderService.getOrder(id)),
+    switchMap(order => forkJoin({
+      order: of(order),
+      user: this.userService.getUser(order.userId)
+    })),
+    switchMap(({ order, user }) => forkJoin({
+      order: of(order),
+      user: of(user),
+      address: this.addressService.getAddress(user.addressId)
+    })),
+    takeUntil(this.destroy$)
+  );
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+```
+
+**Even better (Angular 16+ with takeUntilDestroyed):**
+
+```typescript
+// ✅ Cleanest approach with modern Angular
+@Component({...})
+export class OrderDetailsComponent {
+  private destroyRef = inject(DestroyRef);
+
+  vm$ = this.route.params.pipe(
+    map(params => params['id']),
+    switchMap(id => this.loadOrderWithDetails(id)),
+    takeUntilDestroyed(this.destroyRef)
+  );
+
+  private loadOrderWithDetails(orderId: string) {
+    return this.orderService.getOrder(orderId).pipe(
+      switchMap(order =>
+        combineLatest({
+          order: of(order),
+          user: this.userService.getUser(order.userId),
+          address: this.getAddressForOrder(order)
+        })
+      )
+    );
+  }
+}
+```
+
+---
+
+**Incorrect (Nested subscribe for conditional logic):**
+
+```typescript
+// ❌ Nested subscribe for conditional fetch
+this.authService.currentUser$.subscribe(user => {
+  if (user) {
+    this.userService.getProfile(user.id).subscribe(profile => {
+      this.profile = profile;
+    });
+  }
+});
+```
+
+**Correct (Use filter and switchMap):**
+
+```typescript
+// ✅ Operators handle the conditional
+this.authService.currentUser$.pipe(
+  filter((user): user is User => user !== null),
+  switchMap(user => this.userService.getProfile(user.id)),
+  takeUntilDestroyed()
+).subscribe(profile => {
+  this.profile = profile;
+});
+```
+
+---
+
+**Incorrect (Subscribe to trigger side effects):**
+
+```typescript
+// ❌ Subscribe just to call another method
+this.items$.subscribe(items => {
+  this.processItems(items).subscribe(result => {
+    this.saveResult(result).subscribe(() => {
+      console.log('Done');
+    });
+  });
+});
+```
+
+**Correct (Chain with operators):**
+
+```typescript
+// ✅ Single subscription with operator chain
+this.items$.pipe(
+  concatMap(items => this.processItems(items)),
+  concatMap(result => this.saveResult(result)),
+  takeUntilDestroyed()
+).subscribe({
+  next: () => console.log('Done'),
+  error: (err) => console.error('Pipeline failed:', err)
+});
+```
+
+---
+
+**Common operator patterns:**
+
+```typescript
+// Sequential dependent calls
+a$.pipe(
+  switchMap(a => b$(a)),
+  switchMap(b => c$(b))
+)
+
+// Parallel independent calls
+forkJoin({ a: a$, b: b$, c: c$ })
+
+// Parallel then combine
+combineLatest([a$, b$]).pipe(
+  map(([a, b]) => ({ ...a, ...b }))
+)
+
+// Conditional based on value
+source$.pipe(
+  switchMap(value =>
+    value.needsExtra
+      ? fetchExtra(value).pipe(map(extra => ({ ...value, extra })))
+      : of(value)
+  )
+)
+```
+
+**Why it matters:**
+
+- Inner subscriptions don't auto-unsubscribe when outer completes
+
+- Error in inner stream doesn't propagate to outer
+
+- Impossible to cancel/retry the whole chain
+
+- Code becomes unreadable and untestable
+
+Reference: [https://blog.angular-university.io/rxjs-error-handling/](https://blog.angular-university.io/rxjs-error-handling/)
+
+### 3.2 Share Observables to Avoid Duplicate Requests
 
 **Impact: HIGH (Eliminates redundant HTTP calls)**
 
@@ -751,7 +1769,7 @@ export class UserProfileComponent {
 
 Reference: [https://rxjs.dev/api/operators/shareReplay](https://rxjs.dev/api/operators/shareReplay)
 
-### 3.2 Use Async Pipe Instead of Manual Subscribe
+### 3.3 Use Async Pipe Instead of Manual Subscribe
 
 **Impact: HIGH (Automatic cleanup, better change detection)**
 
@@ -815,7 +1833,186 @@ export class UserProfileComponent {
 
 Reference: [https://v16.angular.io/api/common/AsyncPipe](https://v16.angular.io/api/common/AsyncPipe)
 
-### 3.3 Use Efficient RxJS Operators
+### 3.4 Use Correct RxJS Mapping Operators
+
+**Impact: HIGH (Wrong operator causes race conditions, memory leaks, or dropped requests)**
+
+Choosing the wrong higher-order mapping operator (switchMap, exhaustMap, concatMap, mergeMap) causes race conditions, duplicate requests, or lost data. Each has a specific use case.
+
+**Quick Reference:**
+
+| Operator | Behavior | Use When |
+
+|----------|----------|----------|
+
+| `switchMap` | Cancels previous, uses latest | Search, typeahead, GET requests |
+
+| `exhaustMap` | Ignores new until current completes | Form submit, prevent double-click |
+
+| `concatMap` | Queues in order, sequential | Ordered operations, writes |
+
+| `mergeMap` | All run in parallel | Independent parallel tasks |
+
+---
+
+**Incorrect (Wrong operator for search):**
+
+```typescript
+// ❌ mergeMap - All requests run parallel, results arrive out of order
+searchControl.valueChanges.pipe(
+  mergeMap(query => this.searchService.search(query))
+).subscribe(results => {
+  this.results = results; // May show stale results from slow old request!
+});
+
+// ❌ concatMap - Queues all requests, user waits for old queries
+searchControl.valueChanges.pipe(
+  concatMap(query => this.searchService.search(query))
+).subscribe(results => {
+  this.results = results; // Slow - waits for each request sequentially
+});
+```
+
+**Correct (switchMap for search):**
+
+```typescript
+// ✅ switchMap - Cancels previous request, only latest matters
+searchControl.valueChanges.pipe(
+  debounceTime(300),
+  distinctUntilChanged(),
+  switchMap(query => this.searchService.search(query))
+).subscribe(results => {
+  this.results = results; // Always shows results for latest query
+});
+```
+
+---
+
+**Incorrect (Wrong operator for form submit):**
+
+```typescript
+// ❌ switchMap - User double-clicks, first submit is cancelled!
+submitForm$.pipe(
+  switchMap(() => this.orderService.placeOrder(this.form.value))
+).subscribe();
+// First order never placed if user clicks twice quickly
+
+// ❌ mergeMap - Both submits go through, duplicate orders!
+submitForm$.pipe(
+  mergeMap(() => this.orderService.placeOrder(this.form.value))
+).subscribe();
+// User gets charged twice
+```
+
+**Correct (exhaustMap for form submit):**
+
+```typescript
+// ✅ exhaustMap - Ignores clicks while request is pending
+submitForm$.pipe(
+  exhaustMap(() => {
+    this.isSubmitting = true;
+    return this.orderService.placeOrder(this.form.value).pipe(
+      finalize(() => this.isSubmitting = false)
+    );
+  })
+).subscribe({
+  next: (order) => this.router.navigate(['/order', order.id]),
+  error: (err) => this.showError(err)
+});
+// Double-clicks ignored, only one order placed
+```
+
+---
+
+**Incorrect (Wrong operator for sequential writes):**
+
+```typescript
+// ❌ switchMap - Later items cancel earlier ones!
+itemsToSave$.pipe(
+  switchMap(item => this.saveItem(item))
+).subscribe();
+// Only last item gets saved
+
+// ❌ mergeMap - Order not guaranteed, race conditions
+itemsToSave$.pipe(
+  mergeMap(item => this.saveItem(item))
+).subscribe();
+// Items may save out of order, causing data inconsistency
+```
+
+**Correct (concatMap for sequential writes):**
+
+```typescript
+// ✅ concatMap - Each completes before next starts
+itemsToSave$.pipe(
+  concatMap(item => this.saveItem(item))
+).subscribe({
+  complete: () => console.log('All items saved in order')
+});
+// Guaranteed order: item1 saved, then item2, then item3...
+```
+
+---
+
+**Correct (mergeMap for parallel independent operations):**
+
+```typescript
+// ✅ mergeMap - When order doesn't matter and parallel is faster
+notificationIds$.pipe(
+  mergeMap(
+    id => this.markAsRead(id),
+    5 // Optional: limit concurrent requests to 5
+  )
+).subscribe();
+// All notifications marked as read in parallel, fastest completion
+```
+
+---
+
+**Real-world patterns:**
+
+```typescript
+// Autocomplete with loading state
+@Component({...})
+export class SearchComponent {
+  searchControl = new FormControl('');
+  results$ = this.searchControl.valueChanges.pipe(
+    debounceTime(300),
+    distinctUntilChanged(),
+    filter(query => query.length >= 2),
+    switchMap(query => this.search(query).pipe(
+      startWith(null) // Emit null to show loading
+    )),
+    share()
+  );
+}
+
+// Save with optimistic UI
+saveItem(item: Item): Observable<Item> {
+  return of(item).pipe( // Optimistic: return immediately
+    tap(() => this.updateLocalState(item)),
+    concatMap(() => this.api.save(item)), // Then persist
+    catchError(err => {
+      this.rollbackLocalState(item);
+      return throwError(() => err);
+    })
+  );
+}
+```
+
+**Why it matters:**
+
+- `switchMap` + form submit = lost transactions
+
+- `mergeMap` + search = race conditions showing wrong results
+
+- `concatMap` + search = slow UX waiting for old requests
+
+- `exhaustMap` + search = ignored user input
+
+Reference: [https://blog.angular-university.io/rxjs-higher-order-mapping/](https://blog.angular-university.io/rxjs-higher-order-mapping/)
+
+### 3.5 Use Efficient RxJS Operators
 
 **Impact: HIGH (Prevents race conditions and unnecessary work)**
 
@@ -875,7 +2072,7 @@ export class SearchComponent {
 
 Reference: [https://rxjs.dev/guide/operators](https://rxjs.dev/guide/operators)
 
-### 3.4 Use Subject with takeUntil for Cleanup
+### 3.6 Use Subject with takeUntil for Cleanup
 
 **Impact: HIGH (Prevents memory leaks from subscriptions)**
 
@@ -947,7 +2144,123 @@ Reference: [https://rxjs.dev/api/operators/takeUntil](https://rxjs.dev/api/opera
 
 Optimizing templates with *ngFor trackBy, pure pipes, and NgOptimizedImage (v15+).
 
-### 4.1 Use NgOptimizedImage for Images (v15+)
+### 4.1 Avoid Function Calls in Templates
+
+**Impact: CRITICAL (Functions run on every change detection cycle, causing severe performance issues)**
+
+Calling functions directly in templates forces Angular to execute them on every change detection cycle, even if inputs haven't changed. This can cause hundreds of unnecessary executions per second.
+
+**Incorrect (Function called on every cycle):**
+
+```typescript
+@Component({
+  selector: 'app-user-card',
+  template: `
+    <div class="user">
+      <!-- getFullName() runs 100+ times on scroll, clicks, any event -->
+      <h2>{{ getFullName() }}</h2>
+      <span>{{ calculateAge(user.birthDate) }}</span>
+      <p>{{ formatAddress(user.address) }}</p>
+    </div>
+  `
+})
+export class UserCardComponent {
+  @Input() user!: User;
+
+  getFullName(): string {
+    console.log('getFullName called'); // Logs hundreds of times!
+    return `${this.user.firstName} ${this.user.lastName}`;
+  }
+
+  calculateAge(birthDate: Date): number {
+    const today = new Date();
+    return today.getFullYear() - birthDate.getFullYear();
+  }
+
+  formatAddress(address: Address): string {
+    return `${address.street}, ${address.city}`;
+  }
+}
+```
+
+**Correct (Use pipes or computed values):**
+
+```typescript
+// Option 1: Pure Pipe (recommended for reusable transformations)
+@Pipe({ name: 'fullName', standalone: true, pure: true })
+export class FullNamePipe implements PipeTransform {
+  transform(user: User): string {
+    return `${user.firstName} ${user.lastName}`;
+  }
+}
+
+@Pipe({ name: 'age', standalone: true, pure: true })
+export class AgePipe implements PipeTransform {
+  transform(birthDate: Date): number {
+    return new Date().getFullYear() - birthDate.getFullYear();
+  }
+}
+
+@Component({
+  selector: 'app-user-card',
+  template: `
+    <div class="user">
+      <!-- Pipes only run when input changes -->
+      <h2>{{ user | fullName }}</h2>
+      <span>{{ user.birthDate | age }}</span>
+      <p>{{ user.address.street }}, {{ user.address.city }}</p>
+    </div>
+  `,
+  imports: [FullNamePipe, AgePipe],
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class UserCardComponent {
+  @Input() user!: User;
+}
+
+// Option 2: Computed signal (Angular 16+)
+@Component({
+  selector: 'app-user-card',
+  template: `
+    <div class="user">
+      <h2>{{ fullName() }}</h2>
+      <span>{{ age() }}</span>
+    </div>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class UserCardComponent {
+  user = input.required<User>();
+
+  fullName = computed(() =>
+    `${this.user().firstName} ${this.user().lastName}`
+  );
+
+  age = computed(() =>
+    new Date().getFullYear() - this.user().birthDate.getFullYear()
+  );
+}
+```
+
+**Why it matters:**
+
+- Pure pipes are memoized - only re-execute when inputs change by reference
+
+- Computed signals track dependencies automatically
+
+- Without this, a list of 100 items with 3 functions = 300+ calls per change detection
+
+- Common symptom: app feels "janky" or slow during scrolling/typing
+
+**When functions ARE acceptable:**
+
+- Event handlers: `(click)="handleClick()"` - only called on actual events
+
+- Template reference variables: `#input` with `input.value`
+
+Reference: [https://angular.dev/guide/pipes](https://angular.dev/guide/pipes)
+
+### 4.2 Use NgOptimizedImage for Images (v15+)
 
 **Impact: HIGH (LCP improvement, automatic lazy loading)**
 
@@ -1072,7 +2385,7 @@ export class ImageComponent implements AfterViewInit {
 
 Reference: [https://v16.angular.io/guide/image-directive](https://v16.angular.io/guide/image-directive)
 
-### 4.2 Use Pure Pipes for Data Transformation
+### 4.3 Use Pure Pipes for Data Transformation
 
 **Impact: HIGH (Memoized computation, called only when input changes)**
 
@@ -1137,7 +2450,7 @@ export class ProductListComponent {
 
 Reference: [https://v16.angular.io/guide/pipes](https://v16.angular.io/guide/pipes)
 
-### 4.3 Use trackBy with *ngFor
+### 4.4 Use trackBy with *ngFor
 
 **Impact: HIGH (Prevents unnecessary DOM recreation)**
 
@@ -1194,6 +2507,133 @@ export class UserListComponent {
 - Track by `index` only when items have no unique ID
 
 Reference: [https://v16.angular.io/api/common/NgForOf](https://v16.angular.io/api/common/NgForOf)
+
+### 4.5 Use Virtual Scrolling for Large Lists
+
+**Impact: HIGH (Renders only visible items, reducing DOM nodes from 1000s to ~20)**
+
+Rendering thousands of items creates thousands of DOM nodes, causing slow initial render, high memory usage, and janky scrolling. Virtual scrolling renders only visible items.
+
+**Incorrect (Renders all items):**
+
+```typescript
+@Component({
+  selector: 'app-product-list',
+  template: `
+    <!-- 10,000 products = 10,000 DOM nodes = slow & memory hungry -->
+    <div class="product-list">
+      @for (product of products; track product.id) {
+        <app-product-card [product]="product" />
+      }
+    </div>
+  `
+})
+export class ProductListComponent {
+  products: Product[] = []; // 10,000 items loaded
+}
+```
+
+**Correct (Virtual scrolling):**
+
+```typescript
+import { ScrollingModule } from '@angular/cdk/scrolling';
+
+@Component({
+  selector: 'app-product-list',
+  template: `
+    <!-- Only ~10-20 visible items rendered at a time -->
+    <cdk-virtual-scroll-viewport
+      itemSize="80"
+      class="product-list"
+    >
+      <app-product-card
+        *cdkVirtualFor="let product of products; trackBy: trackById"
+        [product]="product"
+      />
+    </cdk-virtual-scroll-viewport>
+  `,
+  styles: [`
+    .product-list {
+      height: 600px; /* Fixed height required */
+      width: 100%;
+    }
+  `],
+  imports: [ScrollingModule],
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class ProductListComponent {
+  products: Product[] = []; // 10,000 items - no problem!
+
+  trackById(index: number, product: Product): number {
+    return product.id;
+  }
+}
+```
+
+**For variable height items:**
+
+```typescript
+@Component({
+  selector: 'app-infinite-list',
+  template: `
+    <cdk-virtual-scroll-viewport
+      itemSize="50"
+      (scrolledIndexChange)="onScroll($event)"
+      class="list-container"
+    >
+      <div *cdkVirtualFor="let item of items; trackBy: trackById">
+        {{ item.name }}
+      </div>
+      @if (loading) {
+        <div class="loader">Loading more...</div>
+      }
+    </cdk-virtual-scroll-viewport>
+  `,
+  imports: [ScrollingModule]
+})
+export class InfiniteListComponent {
+  items: Item[] = [];
+  loading = false;
+
+  @ViewChild(CdkVirtualScrollViewport) viewport!: CdkVirtualScrollViewport;
+
+  onScroll(index: number): void {
+    const end = this.viewport.getRenderedRange().end;
+    const total = this.viewport.getDataLength();
+
+    if (end >= total - 5 && !this.loading) {
+      this.loadMore();
+    }
+  }
+
+  private loadMore(): void {
+    this.loading = true;
+    // Fetch next page...
+  }
+}
+```
+
+**Advanced: Infinite scroll with virtual scrolling:**
+
+**Why it matters:**
+
+- 10,000 items without virtual scroll: ~500MB memory, 5+ seconds render
+
+- 10,000 items with virtual scroll: ~50MB memory, instant render
+
+- Only visible items + small buffer are in DOM at any time
+
+- `templateCacheSize` reuses DOM nodes for better performance
+
+**When NOT to use virtual scrolling:**
+
+- Lists under 100 items (overhead not worth it)
+
+- Items need to be fully rendered for SEO
+
+- Complex item heights that can't be estimated
+
+Reference: [https://material.angular.io/cdk/scrolling/overview](https://material.angular.io/cdk/scrolling/overview)
 
 ---
 
@@ -1880,6 +3320,280 @@ export class DataProcessorComponent {
 - Consider Comlink library for easier communication
 
 Reference: [https://angular.dev/guide/web-worker](https://angular.dev/guide/web-worker)
+
+### 8.2 Prevent Memory Leaks
+
+**Impact: HIGH (Uncleaned subscriptions, timers, and listeners cause app slowdown and crashes)**
+
+Memory leaks occur when resources aren't released after component destruction. Common sources: subscriptions, timers, event listeners, and DOM references. Over time, leaks cause slowdown and crashes.
+
+**Incorrect (Subscription not cleaned up):**
+
+```typescript
+// ❌ Subscription lives forever after component destroyed
+@Component({...})
+export class DashboardComponent implements OnInit {
+  ngOnInit() {
+    // This subscription NEVER gets cleaned up
+    this.dataService.getData().subscribe(data => {
+      this.data = data;
+    });
+
+    // Interval runs forever, even after navigation
+    setInterval(() => this.refresh(), 5000);
+
+    // Event listener never removed
+    window.addEventListener('resize', this.onResize);
+  }
+
+  onResize = () => {
+    this.width = window.innerWidth;
+  };
+}
+```
+
+**Correct (Proper cleanup):**
+
+```typescript
+// ✅ Modern approach: takeUntilDestroyed (Angular 16+)
+@Component({...})
+export class DashboardComponent {
+  private destroyRef = inject(DestroyRef);
+
+  data$ = this.dataService.getData().pipe(
+    takeUntilDestroyed(this.destroyRef)
+  );
+
+  constructor() {
+    // Auto-cleaned up when component destroys
+    interval(5000).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe(() => this.refresh());
+  }
+}
+
+// ✅ Classic approach: Subject + takeUntil
+@Component({...})
+export class DashboardComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+
+  ngOnInit() {
+    this.dataService.getData().pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(data => this.data = data);
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+```
+
+---
+
+**Incorrect (Timer/Interval not cleared):**
+
+```typescript
+// ❌ setInterval runs forever
+@Component({...})
+export class PollingComponent implements OnInit {
+  ngOnInit() {
+    setInterval(() => {
+      this.fetchData(); // Runs even after component destroyed!
+    }, 3000);
+  }
+}
+```
+
+**Correct (Clear timers):**
+
+```typescript
+// ✅ Option 1: Use RxJS interval with takeUntilDestroyed
+@Component({...})
+export class PollingComponent {
+  private destroyRef = inject(DestroyRef);
+
+  constructor() {
+    interval(3000).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      switchMap(() => this.dataService.fetch())
+    ).subscribe(data => this.data = data);
+  }
+}
+
+// ✅ Option 2: Manual cleanup with clearInterval
+@Component({...})
+export class PollingComponent implements OnInit, OnDestroy {
+  private intervalId?: ReturnType<typeof setInterval>;
+
+  ngOnInit() {
+    this.intervalId = setInterval(() => this.fetchData(), 3000);
+  }
+
+  ngOnDestroy() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+    }
+  }
+}
+
+// ✅ Option 3: setTimeout with recursive call
+@Component({...})
+export class PollingComponent implements OnDestroy {
+  private timeoutId?: ReturnType<typeof setTimeout>;
+  private isDestroyed = false;
+
+  ngOnInit() {
+    this.poll();
+  }
+
+  private poll() {
+    if (this.isDestroyed) return;
+
+    this.fetchData();
+    this.timeoutId = setTimeout(() => this.poll(), 3000);
+  }
+
+  ngOnDestroy() {
+    this.isDestroyed = true;
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+    }
+  }
+}
+```
+
+---
+
+**Incorrect (Event listener not removed):**
+
+```typescript
+// ❌ Window listener persists forever
+@Component({...})
+export class ResponsiveComponent implements OnInit {
+  ngOnInit() {
+    window.addEventListener('resize', this.handleResize);
+    document.addEventListener('click', this.handleClick);
+  }
+
+  handleResize = () => { /* ... */ };
+  handleClick = () => { /* ... */ };
+}
+```
+
+**Correct (Remove listeners):**
+
+```typescript
+// ✅ Option 1: Manual cleanup
+@Component({...})
+export class ResponsiveComponent implements OnInit, OnDestroy {
+  // Must use arrow function or bind to keep 'this' reference
+  private handleResize = () => {
+    this.width = window.innerWidth;
+  };
+
+  ngOnInit() {
+    window.addEventListener('resize', this.handleResize);
+  }
+
+  ngOnDestroy() {
+    window.removeEventListener('resize', this.handleResize);
+  }
+}
+
+// ✅ Option 2: RxJS fromEvent (recommended)
+@Component({...})
+export class ResponsiveComponent {
+  private destroyRef = inject(DestroyRef);
+
+  width$ = fromEvent(window, 'resize').pipe(
+    debounceTime(100),
+    map(() => window.innerWidth),
+    startWith(window.innerWidth),
+    takeUntilDestroyed(this.destroyRef)
+  );
+}
+
+// ✅ Option 3: Renderer2 for SSR compatibility
+@Component({...})
+export class ResponsiveComponent implements OnInit, OnDestroy {
+  private renderer = inject(Renderer2);
+  private unlistenFn?: () => void;
+
+  ngOnInit() {
+    this.unlistenFn = this.renderer.listen('window', 'resize', () => {
+      this.width = window.innerWidth;
+    });
+  }
+
+  ngOnDestroy() {
+    this.unlistenFn?.();
+  }
+}
+```
+
+---
+
+**Incorrect (Holding references to destroyed elements):**
+
+```typescript
+// ❌ Service holds reference to destroyed component
+@Injectable({ providedIn: 'root' })
+export class ModalService {
+  private openModals: ModalComponent[] = [];
+
+  register(modal: ModalComponent) {
+    this.openModals.push(modal);
+    // Never removed - component reference held forever!
+  }
+}
+```
+
+**Correct (Clean up references):**
+
+```typescript
+// ✅ Properly manage references
+@Injectable({ providedIn: 'root' })
+export class ModalService {
+  private openModals = new Set<ModalComponent>();
+
+  register(modal: ModalComponent) {
+    this.openModals.add(modal);
+  }
+
+  unregister(modal: ModalComponent) {
+    this.openModals.delete(modal);
+  }
+}
+
+@Component({...})
+export class ModalComponent implements OnDestroy {
+  private modalService = inject(ModalService);
+
+  constructor() {
+    this.modalService.register(this);
+  }
+
+  ngOnDestroy() {
+    this.modalService.unregister(this);
+  }
+}
+```
+
+**Memory leak detection checklist:**
+
+- [ ] All subscriptions use `takeUntilDestroyed` or `takeUntil`
+
+- [ ] All `setInterval`/`setTimeout` cleared in `ngOnDestroy`
+
+- [ ] All `addEventListener` has matching `removeEventListener`
+
+- [ ] No component references stored in long-lived services
+
+- [ ] Use Chrome DevTools Memory tab to detect leaks
+
+Reference: [https://angular.dev/best-practices/runtime-performance](https://angular.dev/best-practices/runtime-performance)
 
 ---
 

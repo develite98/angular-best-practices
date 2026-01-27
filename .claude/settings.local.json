@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(gh api:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(pnpm run build:*)"
     ]
   }
 }

@@ -9,7 +9,7 @@ metadata:
 
 # Angular Best Practices (Legacy: v12-16)
 
-Comprehensive performance optimization guide for Angular 12-16 applications using NgModule-based architecture and RxJS-centric patterns. Contains 18+ rules across 8 categories, prioritized by impact to guide automated refactoring and code generation.
+Comprehensive performance optimization guide for Angular 12-16 applications using NgModule-based architecture and RxJS-centric patterns. Contains 30+ rules across 8 categories, prioritized by impact to guide automated refactoring and code generation.
 
 ## When to Apply
 
@@ -48,6 +48,9 @@ Reference these guidelines when:
 ### 1. Change Detection (CRITICAL)
 
 - `change-rxjs-state` - Use BehaviorSubject with OnPush for reactive state
+- `change-onpush` - Use OnPush change detection strategy
+- `change-detach-reattach` - Detach change detector for heavy operations
+- `change-run-outside-zone` - Run non-UI code outside NgZone
 
 ### 2. Bundle & Lazy Loading (CRITICAL)
 
@@ -55,17 +58,24 @@ Reference these guidelines when:
 - `bundle-scam` - Use Single Component Angular Modules pattern
 - `bundle-lazy-routes` - Lazy load routes with loadChildren
 - `bundle-preload` - Preload routes for perceived speed
+- `bundle-no-barrel-imports` - Avoid barrel files, use direct imports
 
 ### 3. RxJS Optimization (HIGH)
 
 - `rxjs-async-pipe` - Use async pipe instead of manual subscriptions
 - `rxjs-takeuntil` - Use takeUntil with destroy$ Subject for cleanup
+- `rxjs-share-replay` - Share observables to avoid duplicate requests
+- `rxjs-operators` - Use efficient RxJS operators
+- `rxjs-mapping-operators` - Use correct mapping operators (switchMap vs exhaustMap)
+- `rxjs-no-nested-subscribe` - Avoid nested subscriptions
 
 ### 4. Template Performance (HIGH)
 
 - `template-trackby` - Use trackBy function with *ngFor
 - `template-pure-pipes` - Use pure pipes for expensive transformations
 - `template-ng-optimized-image` - Use NgOptimizedImage for image optimization
+- `template-no-function-calls` - Avoid function calls in templates
+- `template-virtual-scroll` - Use virtual scrolling for large lists
 
 ### 5. Dependency Injection (MEDIUM-HIGH)
 
@@ -82,6 +92,12 @@ Reference these guidelines when:
 
 - `forms-reactive` - Use reactive forms instead of template-driven
 - `forms-typed` - Use typed FormGroup for type safety
+
+### 8. General Performance (LOW-MEDIUM)
+
+- `perf-memory-leaks` - Prevent memory leaks (timers, listeners, subscriptions)
+- `perf-web-workers` - Offload heavy computation to Web Workers
+- `arch-smart-dumb-components` - Use Smart/Dumb component pattern
 
 ## How to Use
 
