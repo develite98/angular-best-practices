@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "organization": "Community",
+  "date": "February 2026",
+  "abstract": "BEM (Block Element Modifier) CSS methodology guide for Angular applications. Enforces component-scoped BEM naming, shallow nesting, and proper component decomposition to create reusable, maintainable, and shareable front-end code. Contains rules prioritized by impact for AI-assisted code generation and refactoring.",
+  "angularVersion": "Angular 2+",
+  "references": [
+    "https://getbem.com",
+    "https://angular.dev/guide/components/styling",
+    "https://en.bem.info/methodology/quick-start"
+  ]
+}

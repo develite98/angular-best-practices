@@ -3,7 +3,8 @@
     "allow": [
       "Bash(gh api:*)",
       "Bash(npm view:*)",
-      "Bash(pnpm run build:*)"
+      "Bash(pnpm run build:*)",
+      "Bash(dir:*)"
     ]
   }
 }
