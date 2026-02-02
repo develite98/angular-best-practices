@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "organization": "Community",
+  "date": "February 2026",
+  "abstract": "Comprehensive naming convention guide for TypeScript and Angular applications. Covers casing rules, prefix conventions, boolean naming, the S-I-D principle, context duplication, and structured naming patterns (P/HC/LC, A/HC/LC) for variables and functions. Contains rules prioritized by impact for AI-assisted code generation and refactoring.",
+  "references": [
+    "https://angular.dev/style-guide",
+    "https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html"
+  ]
+}
